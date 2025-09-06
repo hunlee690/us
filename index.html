@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title id="pageTitle">Us — Private Space 💌</title>
+  <meta name="description" content="A private place for us." />
+  <link rel="icon" href="assets/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <script defer src="data.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <!-- Gate: full-screen login required -->
+  <div id="gate" class="gate">
+    <div class="gate-card">
+      <h2>Welcome 💌</h2>
+      <p>Enter our secret to view this private space.</p>
+      <input id="gPass" type="password" placeholder="password" />
+      <div class="row">
+        <button id="gSignin" class="btn-primary" type="button">Unlock</button>
+      </div>
+      <p class="hint">Hint: we have two keys.</p>
+      <div id="authMsg" class="auth-msg"></div>
+    </div>
+  </div>
+
+  <header class="nav">
+    <div class="brand">
+      <span id="pageTitleInline" class="editable" contenteditable="false">Us — Private Space</span><span>❤️</span>
+    </div>
+    <nav class="hide-on-mobile">
+      <a href="#home">Home</a><a href="#timeline">Our Story</a><a href="#gallery">Gallery</a>
+      <a href="#letters">Letters</a><a href="#counters">Countdown</a><a href="#playlist">Playlist</a>
+      <a href="#quiz">Quiz</a><a href="#bucket">Bucket List</a>
+    </nav>
+    <button id="versionToggle" class="circle-btn" title="Switch version"><span class="tag">hnnu</span></button>
+    <button id="signOut" class="circle-btn" title="Lock site">🔒</button>
+  </header>
+
+  <main>
+    <!-- Hero: background with slim title (no glass/card) -->
+    <section id="home" class="hero">
+      
+      <div class="hero-decoration" aria-hidden="true"></div>
+
+      <div class="hero-title">
+        <h1 class="type">
+          <span id="heroHeadline">Personal Title</span> ✨
+        </h1>
+       <p id="openingLine" class="subtitle editable" contenteditable="false"></p>
+
+        <!-- Surprise button -->
+        <div class="row center" style="margin-top:12px">
+          <button id="openSurprise" class="btn-primary" type="button">Open a surprise</button>
+        </div>
+      </div>
+
+      <div class="floating-theme" aria-hidden="true"></div>
+    </section>
+
+    <!-- Counters & Dates -->
+    <section id="counters" class="section">
+      <h2>Time that ties us</h2>
+
+      <div class="card">
+        <div class="fields">
+          <div class="field">
+            <label for="relationshipStart">Start date (static)</label>
+            <div class="input">
+              <div class="icon">📅</div>
+              <!-- Static: 5 September 2022 (set by JS) -->
+              <input id="relationshipStart" type="date" class="editable-input" disabled/>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="nextMeetDate">Next meet</label>
+            <div class="input">
+              <div class="icon">🗓️</div>
+              <input id="nextMeetDate" type="date" class="editable-input" disabled/>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="counter-grid" style="margin-top:16px">
+        <div class="card">
+          <div class="stat" id="daysTogether">—</div>
+          <div class="label">Days together</div>
+        </div>
+        <div class="card">
+          <div class="stat" id="nextMeetCountdown">—</div>
+          <div class="label">Until we meet again</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Timeline -->
+    <section id="timeline" class="section">
+      <h2>Our story</h2>
+      <div id="timelineList" class="timeline"></div>
+      <div id="timelineEmpty" class="empty">No moments yet.</div>
+    </section>
+
+    <!-- Gallery -->
+    <section id="gallery" class="section">
+      <h2>Moments I adore</h2>
+      <div id="galleryGrid" class="gallery-grid"></div>
+      <div id="galleryEmpty" class="empty">No photos yet.</div>
+    </section>
+
+    <!-- Letters -->
+    <section id="letters" class="section">
+      <h2>Letters to you</h2>
+      <div id="lettersWrap" class="letters"></div>
+      <div id="lettersEmpty" class="empty">No letters yet.</div>
+    </section>
+
+    <!-- Playlist -->
+    <section id="playlist" class="section">
+      <h2>Our soundtrack</h2>
+      <div class="playlist-embed">
+        <iframe id="playlistFrame" width="100%" height="380" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"></iframe>
+      </div>
+    </section>
+
+    <!-- Quiz -->
+    <section id="quiz" class="section">
+      <h2>How well do you know “us”? 💘</h2>
+      <form id="quizForm" class="quiz">
+        <div class="q"></div>
+        <button type="submit" class="btn-primary">Check answers</button>
+        <div id="quizResult" class="quiz-result" role="status" aria-live="polite"></div>
+      </form>
+      <div id="quizEmpty" class="empty">No questions yet.</div>
+    </section>
+
+    <!-- Bucket -->
+    <section id="bucket" class="section">
+      <h2>Our someday list</h2>
+      <ul id="bucketList" class="bucket"></ul>
+      <div id="bucketEmpty" class="empty">Nothing here yet.</div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Made with ❤️ by <span id="yourName" class="editable" contenteditable="false">You</span> • <span id="year"></span></p>
+  </footer>
+
+  <!-- Lightbox -->
+  <div id="lightbox" class="lightbox" aria-hidden="true">
+    <button class="lightbox-close" aria-label="Close">×</button>
+    <img class="lightbox-img" alt="">
+    <div class="lightbox-cap"></div>
+  </div>
+
+  <!-- Surprise Modal -->
+  <dialog id="surprise">
+    <h3>Surprise 🎁</h3>
+    <p id="surpriseMsg" class="editable" contenteditable="false"></p>
+    <button id="closeSurprise" class="btn-primary">Aww, thank you!</button>
+  </dialog>
+</body>
+</html>
