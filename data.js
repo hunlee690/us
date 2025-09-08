@@ -104,7 +104,13 @@ quiz: [
   }
 ],
 
-      bucket: []
+bucket: [
+  { text: "Watch a sunrise together", done: false },
+  { text: "Cook a new recipe", done: false },
+  { text: "Weekend trip to the mountains", done: false },
+  { text: "Stargazing night", done: false }
+  ]
     }
   }
 };
+
