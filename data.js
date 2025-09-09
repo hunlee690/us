@@ -35,7 +35,7 @@ window.SITE_DATA = {
       yourName: "",
       herName: "",
       openingLine: "",
-      surpriseMessage: "From 5 Sep 2022, every day with you has been a little sweeter. You’re my bacha and my home. Next time we meet, I’m bringing the tshirt to bring that pretty smile Roll on me. 🍯🐝💙",
+      surpriseMessage: "From 5 Sep 2022, every day with you has been a little sweeter. You’re my bacha and my home. Next time we meet, I’m bringing the tshirt to bring that pretty smile Roll on me. 🍯🐝💙I’m also sorry for the many mistakes I’ve made along the way — yet you’re still here, standing with me till this day. Whatever I searched for, I never knew I already had it all in you. Now I’ve realized… it’s always been you.",
       playlistEmbed: { src: "https://open.spotify.com/embed/playlist/31SFaLiIHmjl29RF8dXuO0?utm_source=generator"},
       timeline: [],
 gallery: [
@@ -113,4 +113,5 @@ bucket: [
     }
   }
 };
+
 
