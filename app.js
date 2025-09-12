@@ -114,7 +114,6 @@
   function getProfile(v, SITE_DATA) {
     const base = {
       relationship_start: SITE_DATA.relationshipStart || "",
-      // Prefer localStorage for immediate shared experience; fallback to JSON
       next_meet_date: (localStorage.getItem(NEXT_MEET_KEY) || SITE_DATA.nextMeetDate || "")
     };
     const ver = (SITE_DATA.versions && SITE_DATA.versions[v]) || {};
@@ -145,21 +144,16 @@
   function applyEditability() {
     const canEdit = isCurrentEditable();
 
-    // Inline fields
     ["#pageTitleInline", "#heroHeadline", "#openingLine", "#surpriseMsg", "#yourName"]
       .map(s => $(s)).filter(Boolean)
       .forEach(n => n.setAttribute("contenteditable", canEdit ? "true" : "false"));
 
-    // Dates
-    const rel = $("#relationshipStart"); // always read-only
-    const next = $("#nextMeetDate");     // editable only if allowed
+    const rel = $("#relationshipStart"); 
+    const next = $("#nextMeetDate");     
     if (rel) rel.disabled = true;
     if (next) next.disabled = !canEdit;
 
-    // Toolbars visibility
     showToolbars(canEdit);
-
-    // Dynamic sections toggles
     markDynamicSectionEditability(canEdit);
   }
 
@@ -181,7 +175,6 @@
 
   // ===== Helpers =====
   function toDatetimeLocalValue(d) {
-    // Format as YYYY-MM-DDTHH:MM for <input type="datetime-local">
     if (!(d instanceof Date) || isNaN(d)) return "";
     const pad = (n) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -427,14 +420,6 @@
     $("#timelineList").appendChild(item);
   });
 
-  $("#addPhoto")?.addEventListener("click", () => {
-    if (!isCurrentEditable()) return;
-    const img = prompt("Image URL:") || "";
-    if (!img) return;
-    const caption = prompt("Caption (optional):") || "";
-    $("#galleryGrid").appendChild(buildGalleryItem({ img, caption }));
-  });
-
   $("#addLetter")?.addEventListener("click", () => {
     if (!isCurrentEditable()) return;
     const title = prompt("Letter title:") || "";
@@ -460,6 +445,77 @@
     const div = buildQuizQuestion({ q, options, answerIndex: ans-1 }, $$("#quizForm .quiz-q").length);
     $("#quizForm .q").appendChild(div);
     $("#quizEmpty").classList.add("hidden");
+  });
+  
+  // ===== Add hidden file input =====
+  const filePicker = document.createElement("input");
+  filePicker.type = "file";
+  filePicker.accept = "image/*";
+  filePicker.style.display = "none";
+  document.body.appendChild(filePicker);
+
+  async function uploadPhotoToGitHub(file, token) {
+    const META_RAW = document.querySelector('meta[name="us-raw-url"]')?.content || "";
+    const { owner, repo, branch } = parseRepoFromMeta(META_RAW);
+
+    const assetPath = "assets/" + Date.now() + "-" + file.name.replace(/\s+/g, "-");
+    const arrayBuffer = await file.arrayBuffer();
+    let binary = "";
+    new Uint8Array(arrayBuffer).forEach(b => binary += String.fromCharCode(b));
+    const contentB64 = btoa(binary);
+
+    const putUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${assetPath}`;
+    const res = await fetch(putUrl, {
+      method: "PUT",
+      headers: {
+        "Accept": "application/vnd.github+json",
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message: `Add photo ${assetPath}`,
+        content: contentB64,
+        branch,
+        committer: { name: "US Site", email: "bot@example.com" }
+      })
+    });
+    if (!res.ok) throw new Error(`Upload failed: ${res.status} ${res.statusText}`);
+    return assetPath;
+  }
+
+  // ===== Updated Add Photo handler =====
+  $("#addPhoto")?.addEventListener("click", () => {
+    if (!isCurrentEditable()) return;
+    filePicker.value = "";
+    filePicker.click();
+
+    filePicker.onchange = async () => {
+      const file = filePicker.files[0];
+      if (!file) return;
+
+      try {
+        let token = sessionStorage.getItem("gh_token");
+        if (!token) {
+          token = prompt("Paste a GitHub token with contents:write for this repo") || "";
+          if (!token) throw new Error("No token provided.");
+          sessionStorage.setItem("gh_token", token);
+        }
+
+        const assetPath = await uploadPhotoToGitHub(file, token);
+        const caption = prompt("Caption (optional):") || "";
+
+        $("#galleryGrid").appendChild(buildGalleryItem({ img: assetPath, caption }));
+        $("#galleryEmpty").classList.add("hidden");
+
+        const slice = collectDataForSave();
+        await commitSiteDataToGitHub(slice);
+
+        alert("Photo uploaded and site-data.json updated ✅");
+      } catch (err) {
+        console.error(err);
+        alert("Photo upload failed. See console for details.");
+      }
+    };
   });
 
   // ===== Save: collect only CURRENT VERSION (DOM → slice to merge later)
