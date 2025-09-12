@@ -2,11 +2,15 @@ name: Update site-data from Issues
 
 on:
   issues:
-    types: [opened]
+    types: [opened, edited, reopened]
 
 permissions:
   contents: write
   issues: write
+
+concurrency:
+  group: site-data-update
+  cancel-in-progress: false
 
 jobs:
   update:
@@ -14,28 +18,53 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Ensure content directory
+        run: mkdir -p content
 
       - name: Decode JSON from issue body
+        shell: bash
         run: |
-          echo "${{ github.event.issue.body }}" | base64 --decode > content/site-data.json
+          # Issue body is a base64 string produced by your site
+          printf '%s' "${{ github.event.issue.body }}" | base64 --decode > content/site-data.json
+
           # Validate JSON
           node -e "JSON.parse(require('fs').readFileSync('content/site-data.json','utf8'))"
 
-      - name: Commit changes
+      - name: Commit changes (if any)
+        shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add content/site-data.json
-          git commit -m "Update site-data.json via issue #${{ github.event.issue.number }}" || echo "No changes to commit"
-          git push
+          if git diff --quiet -- content/site-data.json; then
+            echo "No changes to commit"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add content/site-data.json
+            git commit -m "Update site-data.json via issue #${{ github.event.issue.number }}"
+            git push
+          fi
 
-      - name: Add comment
-        uses: actions-ecosystem/action-add-comment@v2
+      - name: Comment and close issue
+        uses: actions/github-script@v7
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          body: "✅ Data saved to **content/site-data.json** and committed."
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue_number = context.issue.number;
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number,
+              body: "✅ Data saved to **content/site-data.json** and committed."
+            });
+            await github.rest.issues.update({
+              ...context.repo,
+              issue_number,
+              state: "closed"
+            });
 
-      - name: Close issue
-        uses: actions-ecosystem/action-close-issue@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
