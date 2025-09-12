@@ -534,9 +534,10 @@
     }
 
     const url = `${ghBase}/issues/new`
-              + `?title=${encodeURIComponent(`US-SITE-DATA update (${currentVersion})`)}`
-              + `&body=${encodeURIComponent(payload)}`;
-
+          + `?title=${encodeURIComponent(`US-SITE-DATA update (${currentVersion})`)}`
+          + `&labels=${encodeURIComponent('auto-update')}`
+          + `&body=${encodeURIComponent(payload)}`;
+    
     window.open(url, "_blank");
   });
 
@@ -599,3 +600,4 @@
     loadEverything();
   }
 })();
+
