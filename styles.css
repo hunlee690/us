@@ -337,3 +337,137 @@ html.gated .nav, html.gated main, html.gated footer {
 :root[data-version="pinku"] .floating-theme::after {
   content:"🌸"; right:12%; top:65%; animation: float 10s linear infinite;
 }
+
+/* =========================================================
+   EDITABLE MODE — additive, keeps everything else the same
+   ========================================================= */
+
+/* Make editable regions obvious & pleasant to edit */
+[contenteditable],
+[data-editable] {
+  outline: none;
+  border-radius: 10px;
+  transition: box-shadow .15s ease, background-color .15s ease, border-color .15s ease;
+  cursor: text;
+}
+
+/* Subtle hint on hover */
+[contenteditable]:hover,
+[data-editable]:hover {
+  background: linear-gradient(120deg, var(--glass), transparent);
+  border-color: rgba(255,255,255,.22);
+}
+
+/* Strong focus ring while editing */
+[contenteditable]:focus,
+[data-editable]:focus {
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 0 4px var(--focus);
+  background: rgba(255,255,255,.06);
+}
+
+/* Block-level editable helpers */
+.editable-block {
+  display: block;
+  padding: 8px 10px;
+  min-height: 1.5em;
+}
+
+/* Placeholder for empty editable fields */
+[contenteditable][data-placeholder]:empty::before,
+[data-editable][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* Ensure text selection is enabled in edit areas, even inside blurred containers */
+html.gated [contenteditable],
+html.gated [data-editable] {
+  filter: none;
+  pointer-events: auto;
+  user-select: text;
+}
+
+/* Inputs & textareas in edit mode */
+input[readonly], textarea[readonly] {
+  opacity: .9;
+}
+input[readonly]:focus, textarea[readonly]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--focus);
+}
+
+/* A utility to visually mark anything as editable without changing layout */
+.editable-outline {
+  outline: 2px dashed rgba(255,255,255,.18);
+  outline-offset: 4px;
+}
+
+/* Optional: style for disabled-looking but still editable areas */
+.soft-disabled {
+  opacity: .85;
+  background: linear-gradient(120deg, var(--glass), transparent);
+}
+
+/* =========================================================
+   ADDITIONS FOR FULL CRUD UI (buttons, toolbars, states)
+   ========================================================= */
+
+/* Small action buttons (Add / Delete) */
+.icon-btn, .del-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 32px; min-width: 32px; padding: 0 10px;
+  gap: 6px;
+  border-radius: 10px; border: 1px solid var(--border);
+  background: var(--card); color: var(--text);
+  cursor: pointer; box-shadow: var(--shadow);
+  font: inherit;
+}
+.icon-btn:hover, .del-btn:hover { border-color: rgba(255,255,255,.25); }
+
+.del-btn { background:#2a1b1b; border-color:#3a2020; }
+.del-btn:hover { background:#3d2323; }
+
+/* Toolbar row that JS toggles on when editable */
+.toolbar {
+  display: none; /* default hidden; JS shows when version is editable */
+  gap: 8px; align-items: center; margin: 10px 0 14px 0;
+}
+
+/* Read-only hints when viewing the other version */
+:root[data-locked="true"] [contenteditable="false"],
+:root[data-locked="true"] input:disabled {
+  opacity: .85;
+  cursor: default;
+}
+
+/* Relationship start date always read-only */
+#relationshipStart[disabled] {
+  opacity: .7;
+  cursor: not-allowed;
+}
+
+/* Place per-item delete buttons neatly */
+.timeline .item .del-btn {
+  position: absolute; top: 8px; right: 8px;
+}
+.gallery-grid > div { position: relative; }
+.gallery-grid > div .del-btn {
+  position: absolute; right: 8px; bottom: 8px;
+}
+.letter { position: relative; }
+.letter .del-btn {
+  position: absolute; top: 8px; right: 8px;
+}
+.bucket li .del-btn {
+  position: absolute; top: 50%; right: 10px; transform: translateY(-50%);
+}
+
+/* Quiz layout helpers for editable questions */
+.quiz .q .quiz-q {
+  border: 1px dashed #2a2a32; padding: 12px; border-radius: 12px; margin-bottom: 10px;
+}
+.quiz .q-title { margin-bottom: 6px; }
+.q-opts { display: grid; gap: 6px; }
+.q-opt { display: flex; align-items: center; gap: 8px; }
