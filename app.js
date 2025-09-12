@@ -2,29 +2,67 @@
   // ===== Passwords (hashed) =====
   const HASH_WUVU  = "e980fba218c0efa78ca42f5e845884db9e36ab73a46ed4e8c29b896e546c6c0b"; // pinku
   const HASH_WUVU2 = "5d503713f5c18ef61e2a731093c0c26c5b6c65a9787eb974ea1c209d80279572"; // hnnu
-  const AUTH_KEY = "us_site_authed";
+
+  // We intentionally do NOT persist/restore auth anymore
   const VERSION_KEY = "us_site_version";
 
-  // ===== Data sources (NEW) =====
-  // 1) Inline <script type="application/json" id="site-data"> … </script> (preferred if present)
-  // 2) Local file next to index.html: ./site-data.json
-  // 3) GitHub RAW (set via <meta name="us-raw-url" content="https://raw.githubusercontent.../site-data.json">)
-  const META_RAW = document.querySelector('meta[name="us-raw-url"]')?.content || "";
-  const LOCAL_JSON_URL = new URL("./site-data.json", document.baseURI).toString();
-
-  const $ = (s) => document.querySelector(s);
+  const $  = (s) => document.querySelector(s);
   const $$ = (s) => Array.from(document.querySelectorAll(s));
 
-  // ===== Gate =====
-  const gate = $("#gate");
-  const authMsg = $("#authMsg");
+  // ===== Ensure Gate UI exists (so the prompt ALWAYS shows) =====
+  function ensureGateUI() {
+    let gate = $("#gate");
+    if (!gate) {
+      gate = document.createElement("div");
+      gate.id = "gate";
+      gate.innerHTML = `
+        <div class="gate-card" style="
+          max-width:420px;margin:auto;padding:20px;border-radius:12px;
+          background:#fff;box-shadow:0 10px 30px rgba(0,0,0,.1);text-align:center
+        ">
+          <h2 style="margin:0 0 8px;">Private Space</h2>
+          <p id="authMsg" style="min-height:1.5em;color:#444;margin:0 0 10px;"></p>
+          <input id="gPass" type="password" placeholder="Enter password" autocomplete="current-password"
+                 style="width:100%;padding:10px;border-radius:8px;border:1px solid #ccc;margin-bottom:10px;">
+          <button id="gSignin" class="btn-primary" style="
+            width:100%;padding:10px;border:0;border-radius:8px;cursor:pointer
+          ">Enter</button>
+        </div>`;
+      Object.assign(gate.style, {
+        position:"fixed", inset:"0", display:"grid", placeItems:"center",
+        background:"rgba(240,240,245,.9)", zIndex:"9999"
+      });
+      document.body.appendChild(gate);
+    } else {
+      // make sure required children exist
+      if (!$("#authMsg")) {
+        const p = document.createElement("p"); p.id = "authMsg"; gate.prepend(p);
+      }
+      if (!$("#gPass")) {
+        const input = document.createElement("input"); input.id = "gPass"; input.type = "password";
+        gate.appendChild(input);
+      }
+      if (!$("#gSignin")) {
+        const btn = document.createElement("button"); btn.id = "gSignin"; btn.textContent = "Enter";
+        gate.appendChild(btn);
+      }
+    }
+    document.documentElement.classList.add("gated");
+    gate.style.display = "grid";
+    return gate;
+  }
 
   function showGate(msg = "") {
+    ensureGateUI();
+    const gate = $("#gate");
+    const authMsg = $("#authMsg");
     if (authMsg) authMsg.textContent = msg || "";
     document.documentElement.classList.add("gated");
-    if (gate) gate.style.display = "grid";
+    gate.style.display = "grid";
   }
   function hideGate() {
+    const gate = $("#gate");
+    const authMsg = $("#authMsg");
     if (authMsg) authMsg.textContent = "";
     document.documentElement.classList.remove("gated");
     if (gate) gate.style.display = "none";
@@ -37,43 +75,36 @@
   }
 
   async function trySignin() {
-    const pass = $("#gPass")?.value.trim();
-    if (!pass) { if (authMsg) authMsg.textContent = "Enter the password."; return; }
-    if (authMsg) authMsg.textContent = "Checking…";
+    const passEl = $("#gPass");
+    const msgEl  = $("#authMsg");
+    const pass = passEl?.value.trim() || "";
+    if (!pass) { if (msgEl) msgEl.textContent = "Enter the password."; return; }
+    if (msgEl) msgEl.textContent = "Checking…";
     try {
       const h = await sha256Hex(pass);
       if (h === HASH_WUVU) {
-        localStorage.setItem(AUTH_KEY, "1");
         setVersion("pinku", true);
         hideGate(); loadEverything();
       } else if (h === HASH_WUVU2) {
-        localStorage.setItem(AUTH_KEY, "1");
         setVersion("hnnu", true);
         hideGate(); loadEverything();
       } else {
-        if (authMsg) authMsg.textContent = "Wrong password.";
+        if (msgEl) msgEl.textContent = "Wrong password.";
       }
     } catch (e) {
-      if (authMsg) authMsg.textContent = "Crypto not supported.";
+      if (msgEl) msgEl.textContent = "Crypto not supported.";
     }
   }
 
-  function signOut() {
-    localStorage.removeItem(AUTH_KEY);
-    showGate("");
+  // Always require login on each load
+  function wireGate() {
+    const gate = ensureGateUI();
+    $("#gSignin").onclick = trySignin;
+    // Enter key submits
+    $("#gPass").addEventListener("keydown", (e) => { if (e.key === "Enter") trySignin(); });
   }
 
-  $("#gSignin") && ($("#gSignin").onclick = trySignin);
-  $("#signOut") && ($("#signOut").onclick = signOut);
-
-  // Auto-show/restore auth state (FIX)
-  if (localStorage.getItem(AUTH_KEY) === "1") {
-    hideGate();
-  } else {
-    showGate("");
-  }
-
-  // ===== Version toggle =====
+  // ===== Version toggle (keeps persistence for version ONLY) =====
   const qs = new URLSearchParams(location.search);
   const DEFAULT_VERSION = localStorage.getItem(VERSION_KEY) || "hnnu";
   function getInitialVersion() {
@@ -96,65 +127,32 @@
     const url = new URL(location.href); url.searchParams.set("v", next);
     history.replaceState({}, "", url);
     setVersion(next, true);
-    loadEverything();
+    // Only reload content after successful login; gate stays in control
+    if ($("#gate")?.style.display === "none") loadEverything();
   });
 
-  // ===== Load data (REWORKED) =====
-  function parseInlineSiteData() {
+  // ===== Data loading (local JSON first; safe fallbacks) =====
+  async function fetchSiteData() {
+    // 1) Inline JSON in HTML
     try {
       const tag = document.getElementById("site-data");
-      if (!tag) return null;
-      const raw = tag.textContent?.trim();
-      if (!raw) return null;
-      return JSON.parse(raw);
+      if (tag?.textContent?.trim()) return JSON.parse(tag.textContent);
     } catch (e) {
       console.warn("Inline site-data parse failed:", e);
-      return null;
     }
-  }
-
-  async function fetchJSON(url) {
-    const bust = Date.now().toString(36);
-    const u = new URL(url, document.baseURI);
-    // cache busting while keeping any existing query params
-    u.searchParams.set("_", bust);
-    const res = await fetch(u.toString(), { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-    // Defensive: ensure content is JSON when possible, but still parse if not labeled correctly
-    return await res.json();
-  }
-
-  async function fetchSiteData() {
-    // 1) Inline JSON wins (no fetch needed)
-    const inline = parseInlineSiteData();
-    if (inline) return inline;
-
-    // 2) Local file next to the site (works on any static host / subpath)
+    // 2) Local file next to index.html
     try {
-      return await fetchJSON(LOCAL_JSON_URL);
+      const url = new URL("./site-data.json", document.baseURI);
+      url.searchParams.set("_", Date.now().toString(36)); // cache-bust
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      if (res.ok) return await res.json();
+      console.warn("site-data.json HTTP", res.status, res.statusText);
     } catch (e) {
-      console.warn("Local site-data.json not available:", e.message);
+      console.warn("Local site-data.json fetch failed:", e);
     }
-
-    // 3) GitHub RAW fallback if provided via meta tag
-    if (META_RAW && !/YOUR-USER|YOUR-REPO/.test(META_RAW)) {
-      try {
-        return await fetchJSON(META_RAW);
-      } catch (e) {
-        console.warn("GitHub RAW fetch failed:", e.message);
-      }
-    } else {
-      console.warn("No valid RAW URL configured (set <meta name=\"us-raw-url\" ...>)");
-    }
-
-    // 4) Final fallback to window.SITE_DATA if someone preloads it
-    if (window.SITE_DATA) {
-      console.warn("Using window.SITE_DATA fallback");
-      return window.SITE_DATA;
-    }
-
-    // 5) Give the UI something sane
-    console.error("No site-data available from any source.");
+    // 3) window.SITE_DATA fallback (if preloaded)
+    if (window.SITE_DATA) return window.SITE_DATA;
+    // 4) Last resort: empty shell
     return { relationshipStart: "", nextMeetDate: "", versions: {} };
   }
 
@@ -180,7 +178,7 @@
     };
   }
 
-  // ===== Renderers =====
+  // ===== Renderers (null-safe) =====
   function renderBasics(p) {
     $("#pageTitle") && ($("#pageTitle").textContent = "Us — Private Space 💌");
     $("#pageTitleInline") && ($("#pageTitleInline").textContent = "Us — Private Space");
@@ -289,47 +287,13 @@
     };
   }
 
-  function renderBucket(items) {
-    const ul = $("#bucketList"); if (!ul) return;
-    ul.innerHTML = "";
-    if (!items.length) { $("#bucketEmpty")?.classList.remove("hidden"); return; }
-    $("#bucketEmpty")?.classList.add("hidden");
-    items.forEach((row) => {
-      const li = document.createElement("li"); li.className = row.done ? "done" : "";
-      li.textContent = row.text;
-      ul.appendChild(li);
-    });
-  }
-
   // Lightbox
   const lb = $("#lightbox"), lbImg = lb?.querySelector(".lightbox-img"), lbCap = lb?.querySelector(".lightbox-cap");
   function openLightbox(src, cap) { if (!lb || !lbImg || !lbCap) return; lbImg.src = src; lbCap.textContent = cap || ""; lb.classList.add("open"); lb.setAttribute("aria-hidden", "false"); }
   lb?.querySelector(".lightbox-close")?.addEventListener("click", () => lb.classList.remove("open"));
   lb?.addEventListener("click", (e) => { if (e.target === lb) lb.classList.remove("open"); });
 
-  // Surprise
-  const surprise = $("#surprise");
-  $("#openSurprise")?.addEventListener("click", () => {
-    if (!surprise) return;
-    if (typeof surprise.showModal === "function") surprise.showModal();
-    else surprise.setAttribute("open", "");
-  });
-  $("#closeSurprise")?.addEventListener("click", () => {
-    if (!surprise) return;
-    surprise.close ? surprise.close() : surprise.removeAttribute("open");
-  });
-
-  $$('a[href^="#"]').forEach((a) => {
-    a.addEventListener("click", (e) => {
-      const id = a.getAttribute("href").slice(1);
-      const el = document.getElementById(id);
-      if (!el) return;
-      e.preventDefault();
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  });
-
-  // ===== Save button: open GitHub Issue =====
+  // ===== Save button (unchanged behavior: opens a GitHub issue with payload) =====
   function collectDataForSave() {
     return {
       relationshipStart: $("#relationshipStart")?.value || "",
@@ -342,26 +306,19 @@
           openingLine: $("#openingLine")?.textContent.trim() || "",
           surpriseMessage: $("#surpriseMsg")?.textContent.trim() || "",
           playlistEmbed: { src: $("#playlistFrame")?.src || "" }
-          // TODO: add collectors for timeline/gallery/etc. if you want to edit them live
         }
       }
     };
   }
-
   $("#saveBtn")?.addEventListener("click", () => {
     const data = collectDataForSave();
     const payload = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
-    const gh = (META_RAW && META_RAW.includes("/raw.githubusercontent.com/"))
-      ? META_RAW.replace("https://raw.githubusercontent.com/", "https://github.com/")
-          .replace("/content/site-data.json", "")
-      : "https://github.com/YOUR-USER/YOUR-REPO";
-    const url = `${gh}/issues/new` +
+    const url = `https://github.com/YOUR-USER/YOUR-REPO/issues/new` +
                 `?title=${encodeURIComponent("US-SITE-DATA update")}` +
                 `&body=${encodeURIComponent(payload)}`;
     window.open(url, "_blank");
   });
 
-  // ===== Load everything =====
   async function loadEverything() {
     try {
       const SITE_DATA = await fetchSiteData();
@@ -380,11 +337,14 @@
     }
   }
 
-  // Kickoff after DOM is ready (safer if script is in <head>)
+  // Boot
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => { if (localStorage.getItem(AUTH_KEY) === "1") loadEverything(); });
+    document.addEventListener("DOMContentLoaded", () => {
+      wireGate();          // ALWAYS show prompt
+      showGate("");        // visible from the start
+    });
   } else {
-    if (localStorage.getItem(AUTH_KEY) === "1") loadEverything();
+    wireGate();
+    showGate("");
   }
 })();
-
