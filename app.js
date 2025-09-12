@@ -423,7 +423,7 @@
       const checked = div.querySelector(`input[name="q${i}"]:checked`);
       const answerIndex = checked ? Number(checked.value) : 0;
       return { q, options, answerIndex };
-    }));
+    });
 
     const bucket = $$("#bucketList li").map(li => ({
       text: li.querySelector(".btext")?.textContent.trim() || "",
