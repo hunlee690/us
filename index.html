@@ -73,11 +73,11 @@
             </div>
           </div>
           <div class="field">
-            <label for="nextMeetDate">Next meet</label>
+            <label for="nextMeetDate">Next meet (with time)</label>
             <div class="input">
               <div class="icon">🗓️</div>
-              <!-- editable when current version matches login -->
-              <input id="nextMeetDate" type="date" class="editable-input" />
+              <!-- changed to datetime-local so countdown is accurate -->
+              <input id="nextMeetDate" type="datetime-local" class="editable-input" />
             </div>
           </div>
         </div>
