@@ -517,29 +517,87 @@
     };
   }
 
-  // ===== Save button (fix GitHub URL so it doesn't 404)
-  $("#saveBtn")?.addEventListener("click", () => {
-    const data = collectDataForSave();
-    const payload = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
+  // ===== Direct GitHub commit (no Actions needed)
+  function parseRepoFromMeta(metaRaw) {
+    const fallback = { owner: "hunlee690", repo: "us", branch: "main", path: "content/site-data.json" };
+    try {
+      if (!metaRaw || !metaRaw.includes("raw.githubusercontent.com/")) return fallback;
+      const url = new URL(metaRaw);
+      const parts = url.pathname.split("/").filter(Boolean);
+      // /<owner>/<repo>/<branch>/content/site-data.json
+      return {
+        owner: parts[1] || fallback.owner,
+        repo:  parts[2] || fallback.repo,
+        branch: parts[3] || fallback.branch,
+        path:  parts.slice(4).join("/") || fallback.path,
+      };
+    } catch { return fallback; }
+  }
 
-    // Build GitHub repo URL from META_RAW robustly → https://github.com/<user>/<repo>
-    let ghBase = "https://github.com/hunlee690/us";
-    if (META_RAW && META_RAW.includes("raw.githubusercontent.com/")) {
-      ghBase = META_RAW
-        .replace("https://raw.githubusercontent.com/", "https://github.com/")
-        // strip /main/content/site-data.json (and tolerate blob/raw if present)
-        .replace(/\/(blob|raw)?\/?main\/content\/site-data\.json$/i, "")
-        // also tolerate just /content/site-data.json (no branch)
-        .replace(/\/content\/site-data\.json$/i, "");
+  async function ghFetch(url, method, token, body) {
+    const res = await fetch(url, {
+      method,
+      headers: {
+        "Accept": "application/vnd.github+json",
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "");
+      throw new Error(`${res.status} ${res.statusText}: ${msg}`);
+    }
+    return res.json();
+  }
+
+  async function commitSiteDataToGitHub(data) {
+    const META_RAW = document.querySelector('meta[name="us-raw-url"]')?.content || "";
+    const { owner, repo, branch, path } = parseRepoFromMeta(META_RAW);
+
+    // 1) Token (session-only)
+    let token = sessionStorage.getItem("gh_token");
+    if (!token) {
+      token = prompt("Paste a GitHub token with contents:write for this repo") || "";
+      if (!token) throw new Error("No token provided.");
+      sessionStorage.setItem("gh_token", token);
     }
 
-    const url = `${ghBase}/issues/new`
-      + `?title=${encodeURIComponent(`US-SITE-DATA update (${currentVersion})`)}`
-      + `&labels=${encodeURIComponent('auto-update')}`
-      + `&body=${encodeURIComponent(payload)}`;
+    // 2) Current file SHA (required for updates)
+    const readUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
+    const readRes = await fetch(readUrl, { headers: { "Accept": "application/vnd.github+json" } });
+    let sha = "";
+    if (readRes.status === 200) {
+      const current = await readRes.json();
+      sha = current.sha || "";
+    } else if (readRes.status !== 404) {
+      throw new Error(`Failed to read file: ${readRes.status} ${readRes.statusText}`);
+    }
 
-    
-    window.open(url, "_blank");
+    // 3) Commit
+    const message = `Update site-data.json (${new Date().toISOString()})`;
+    const contentB64 = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
+    const putUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+
+    return ghFetch(putUrl, "PUT", token, {
+      message,
+      content: contentB64,
+      branch,
+      sha: sha || undefined,
+      committer: { name: "US Site", email: "bot@example.com" }
+    });
+  }
+
+  // ===== Save button → direct commit
+  $("#saveBtn")?.addEventListener("click", async () => {
+    try {
+      const data = collectDataForSave();
+      await commitSiteDataToGitHub(data);
+      alert("Saved! site-data.json updated on GitHub ✅");
+    } catch (err) {
+      console.error(err);
+      alert("Save failed. Open DevTools console for details.");
+    }
   });
 
   // ===== Surprise modal small wiring (optional nicety)
@@ -601,5 +659,3 @@
     loadEverything();
   }
 })();
-
-
