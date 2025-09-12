@@ -1,0 +1,41 @@
+name: Update site-data from Issues
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  update:
+    if: contains(github.event.issue.title, 'US-SITE-DATA')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decode JSON from issue body
+        run: |
+          echo "${{ github.event.issue.body }}" | base64 --decode > content/site-data.json
+          # Validate JSON
+          node -e "JSON.parse(require('fs').readFileSync('content/site-data.json','utf8'))"
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add content/site-data.json
+          git commit -m "Update site-data.json via issue #${{ github.event.issue.number }}" || echo "No changes to commit"
+          git push
+
+      - name: Add comment
+        uses: actions-ecosystem/action-add-comment@v2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          body: "✅ Data saved to **content/site-data.json** and committed."
+
+      - name: Close issue
+        uses: actions-ecosystem/action-close-issue@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
