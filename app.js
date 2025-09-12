@@ -462,7 +462,7 @@
     $("#quizEmpty").classList.add("hidden");
   });
 
-  // ===== Save: collect only CURRENT VERSION (DOM → JSON)
+  // ===== Save: collect only CURRENT VERSION (DOM → slice to merge later)
   function collectDataForSave() {
     const relationshipStart = $("#relationshipStart")?.value || ""; // read-only
 
@@ -500,41 +500,42 @@
       done: li.classList.contains("done")
     }));
 
+    // Return JUST the slice for the current version + shared fields
     return {
       relationshipStart,
       nextMeetDate,
-      versions: {
-        [currentVersion]: {
-          heroHeadline: $("#heroHeadline")?.textContent.trim() || "",
-          yourName: $("#yourName")?.textContent.trim() || "",
-          herName: $("#herName")?.textContent.trim() || "",
-          openingLine: $("#openingLine")?.textContent.trim() || "",
-          surpriseMessage: $("#surpriseMsg")?.textContent.trim() || "",
-          playlistEmbed: { src: $("#playlistFrame")?.src || "" },
-          timeline, gallery, letters, quiz, bucket
-        }
+      versionKey: currentVersion,
+      versionPayload: {
+        heroHeadline: $("#heroHeadline")?.textContent.trim() || "",
+        yourName: $("#yourName")?.textContent.trim() || "",
+        herName: $("#herName")?.textContent.trim() || "",
+        openingLine: $("#openingLine")?.textContent.trim() || "",
+        surpriseMessage: $("#surpriseMsg")?.textContent.trim() || "",
+        playlistEmbed: { src: $("#playlistFrame")?.src || "" },
+        timeline, gallery, letters, quiz, bucket
       }
     };
   }
 
-  // ===== Direct GitHub commit (no Actions needed)
-function parseRepoFromMeta(metaRaw) {
-  const fallback = { owner: "hunlee690", repo: "us", branch: "main", path: "content/site-data.json" };
-  try {
-    if (!metaRaw || !metaRaw.includes("raw.githubusercontent.com/")) return fallback;
-    const url = new URL(metaRaw);
-    const parts = url.pathname.split("/").filter(Boolean);
-    // Correct mapping for raw.githubusercontent.com/<owner>/<repo>/<branch>/...
-    return {
-      owner:  parts[0] || fallback.owner,
-      repo:   parts[1] || fallback.repo,
-      branch: parts[2] || fallback.branch,
-      path:   parts.slice(3).join("/") || fallback.path,
-    };
-  } catch {
-    return fallback;
+  // ===== GitHub helpers (robust + merge) =====
+  function parseRepoFromMeta(metaRaw) {
+    const fallback = { owner: "hunlee690", repo: "us", branch: "main", path: "content/site-data.json" };
+    try {
+      if (!metaRaw || !metaRaw.includes("raw.githubusercontent.com/")) return fallback;
+      const url = new URL(metaRaw);
+      const parts = url.pathname.split("/").filter(Boolean);
+      // raw.githubusercontent.com/<owner>/<repo>/<branch>/...
+      return {
+        owner:  parts[0] || fallback.owner,
+        repo:   parts[1] || fallback.repo,
+        branch: parts[2] || fallback.branch,
+        path:   parts.slice(3).join("/") || fallback.path,
+      };
+    } catch {
+      return fallback;
+    }
   }
-}
+
   async function ghFetch(url, method, token, body) {
     const res = await fetch(url, {
       method,
@@ -545,59 +546,156 @@ function parseRepoFromMeta(metaRaw) {
       },
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (!res.ok) {
-      const msg = await res.text().catch(() => "");
-      throw new Error(`${res.status} ${res.statusText}: ${msg}`);
-    }
-    return res.json();
+    return res;
   }
 
-  async function commitSiteDataToGitHub(data) {
+  function decodeBase64ToString(b64) {
+    try {
+      // handle newlines in GitHub 'content'
+      const clean = (b64 || "").replace(/\n/g, "");
+      return decodeURIComponent(escape(atob(clean)));
+    } catch {
+      // fallback
+      return atob((b64 || "").replace(/\n/g, ""));
+    }
+  }
+
+  async function getToken(forceNew = false) {
+    if (!forceNew) {
+      const t = sessionStorage.getItem("gh_token");
+      if (t) return t;
+    }
+    const token = prompt("Paste a GitHub token with contents:write for this repo") || "";
+    if (!token) throw new Error("No token provided.");
+    sessionStorage.setItem("gh_token", token);
+    return token;
+  }
+
+  async function readCurrentFromGitHub(owner, repo, branch, path, token) {
+    // Use authed request to avoid rate limits/private repos issues
+    const readUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
+    const res = await fetch(readUrl, {
+      headers: { "Accept": "application/vnd.github+json", "Authorization": `Bearer ${token}` }
+    });
+
+    if (res.status === 404) {
+      // new file
+      return { sha: "", json: { relationshipStart:"", nextMeetDate:"", versions:{} } };
+    }
+    if (!res.ok) {
+      throw new Error(`Failed to read file: ${res.status} ${res.statusText}`);
+    }
+    const data = await res.json();
+    let json = {};
+    try {
+      json = JSON.parse(decodeBase64ToString(data.content || ""));
+    } catch {
+      json = {};
+    }
+    return { sha: data.sha || "", json };
+  }
+
+  function buildMergedPayload(existing, slice) {
+    // Preserve everything else; only update shared fields & the active version
+    const merged = {
+      ...existing,
+      relationshipStart: slice.relationshipStart || existing.relationshipStart || "",
+      nextMeetDate: slice.nextMeetDate || existing.nextMeetDate || "",
+      versions: { ...(existing.versions || {}) }
+    };
+    merged.versions[slice.versionKey] = {
+      ...(existing.versions?.[slice.versionKey] || {}),
+      ...slice.versionPayload
+    };
+    return merged;
+  }
+
+  async function commitSiteDataToGitHub(slice) {
     const META_RAW = document.querySelector('meta[name="us-raw-url"]')?.content || "";
     const { owner, repo, branch, path } = parseRepoFromMeta(META_RAW);
 
-    // 1) Token (session-only)
-    let token = sessionStorage.getItem("gh_token");
-    if (!token) {
-      token = prompt("Paste a GitHub token with contents:write for this repo") || "";
-      if (!token) throw new Error("No token provided.");
-      sessionStorage.setItem("gh_token", token);
+    // 1) Ensure token
+    let token = await getToken(false);
+
+    // 2) Read current file (with token)
+    let current;
+    try {
+      current = await readCurrentFromGitHub(owner, repo, branch, path, token);
+    } catch (err) {
+      // If auth failed, refresh token once
+      if (String(err).includes("401") || String(err).includes("403")) {
+        sessionStorage.removeItem("gh_token");
+        token = await getToken(true);
+        current = await readCurrentFromGitHub(owner, repo, branch, path, token);
+      } else {
+        throw err;
+      }
     }
 
-    // 2) Current file SHA (required for updates)
-    const readUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
-    const readRes = await fetch(readUrl, { headers: { "Accept": "application/vnd.github+json" } });
-    let sha = "";
-    if (readRes.status === 200) {
-      const current = await readRes.json();
-      sha = current.sha || "";
-    } else if (readRes.status !== 404) {
-      throw new Error(`Failed to read file: ${readRes.status} ${readRes.statusText}`);
-    }
+    // 3) Merge (preserve other version!)
+    const mergedJSON = buildMergedPayload(current.json || {}, slice);
 
-    // 3) Commit
+    // 4) Commit
     const message = `Update site-data.json (${new Date().toISOString()})`;
-    const contentB64 = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
-    const putUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+    const contentB64 = btoa(unescape(encodeURIComponent(JSON.stringify(mergedJSON, null, 2))));
+    const putUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`;
 
-    return ghFetch(putUrl, "PUT", token, {
+    // Use raw fetch to capture specific errors and allow token refresh
+    let putRes = await ghFetch(putUrl, "PUT", token, {
       message,
       content: contentB64,
       branch,
-      sha: sha || undefined,
+      sha: current.sha || undefined,
       committer: { name: "US Site", email: "bot@example.com" }
     });
+
+    // If token got invalid in-between, retry once with fresh token
+    if (putRes.status === 401 || putRes.status === 403) {
+      sessionStorage.removeItem("gh_token");
+      token = await getToken(true);
+      putRes = await ghFetch(putUrl, "PUT", token, {
+        message,
+        content: contentB64,
+        branch,
+        sha: current.sha || undefined,
+        committer: { name: "US Site", email: "bot@example.com" }
+      });
+    }
+
+    if (!putRes.ok) {
+      const msg = await putRes.text().catch(() => "");
+      throw new Error(`${putRes.status} ${putRes.statusText}: ${msg}`);
+    }
+
+    return putRes.json();
   }
 
-  // ===== Save button → direct commit
-  $("#saveBtn")?.addEventListener("click", async () => {
+  // ===== Save button → direct commit (robust)
+  const saveBtn = $("#saveBtn");
+  saveBtn?.addEventListener("click", async (e) => {
+    // If the button is inside a form, stop accidental form submit/reload
+    e?.preventDefault?.();
+
+    if (!isCurrentEditable()) { alert("Unlock this version to save (sign in for this page)."); return; }
+
+    // UI lock to prevent double clicks while saving
+    const prevText = saveBtn.textContent;
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving…";
+
     try {
-      const data = collectDataForSave();
-      await commitSiteDataToGitHub(data);
+      const slice = collectDataForSave();               // only current version
+      await commitSiteDataToGitHub(slice);              // merges with existing file
+      saveBtn.textContent = "Saved ✅";
+      setTimeout(() => { saveBtn.textContent = prevText; }, 1200);
       alert("Saved! site-data.json updated on GitHub ✅");
     } catch (err) {
       console.error(err);
-      alert("Save failed. Open DevTools console for details.");
+      alert("Save failed. Open DevTools console for details.\n\n" + String(err));
+      saveBtn.textContent = "Save failed ⚠️";
+      setTimeout(() => { saveBtn.textContent = prevText; }, 1500);
+    } finally {
+      saveBtn.disabled = false;
     }
   });
 
