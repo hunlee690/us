@@ -83,7 +83,7 @@
   });
 
   // ===== Data loading (local JSON first; fallbacks) =====
-  const META_RAW = document.querySelector('meta[name="us-raw-url"]')?.content || "";
+  const META_RAW = document.querySelector('meta[name="us-raw-url"]')?.content || ""; // <-- keep this one
   const LOCAL_JSON_URL = new URL("./site-data.json", document.baseURI).toString();
 
   async function fetchJSON(url) {
@@ -162,23 +162,18 @@
   }
 
   function markDynamicSectionEditability(canEdit) {
-    // Letters
     $$("#lettersWrap .letter .title, #lettersWrap .letter .body").forEach(n => {
       n.setAttribute("contenteditable", canEdit ? "true" : "false");
     });
-    // Timeline text
     $$("#timelineList .item .title, #timelineList .item .cap").forEach(n => {
       n.setAttribute("contenteditable", canEdit ? "true" : "false");
     });
-    // Gallery captions
     $$("#galleryGrid .gcap").forEach(n => {
       n.setAttribute("contenteditable", canEdit ? "true" : "false");
     });
-    // Bucket
     $$("#bucketList li .btext").forEach(n => {
       n.setAttribute("contenteditable", canEdit ? "true" : "false");
     });
-    // Show/Hide per-item delete buttons
     $$(".del-btn").forEach(btn => btn.style.display = canEdit ? "inline-flex" : "none");
   }
 
@@ -208,7 +203,7 @@
   function daysBetween(a, b) { return Math.floor(Math.abs(b - a) / (1000 * 60 * 60 * 24)); }
   function renderCounters(p) {
     const start = p.relationship_start ? new Date(p.relationship_start) : null;
-    const next = p.next_meet_date ? new Date(p.next_meet_date) : null;
+       const next = p.next_meet_date ? new Date(p.next_meet_date) : null;
     const now = new Date();
     $("#daysTogether").textContent = start ? fmtDays(daysBetween(start, now)) : "—";
     const until = next ? Math.max(0, daysBetween(now, next)) : null;
@@ -253,6 +248,7 @@
     el.appendChild(del);
     return el;
   }
+
   // Gallery CRUD
   async function renderGallery(items) {
     const wrap = $("#galleryGrid"); wrap.innerHTML = "";
@@ -299,7 +295,7 @@
     return card;
   }
 
-  // Quiz CRUD (render only; add form manages creation)
+  // Quiz CRUD
   function renderQuiz(items) {
     const form = $("#quizForm"); const qBox = form.querySelector(".q"); qBox.innerHTML = "";
     if (!items.length) { $("#quizEmpty").classList.remove("hidden"); } else { $("#quizEmpty").classList.add("hidden"); }
@@ -339,7 +335,6 @@
     li.innerHTML = `<span class="btext" contenteditable="false">${row.text || ""}</span>`;
     li.addEventListener("click", (e) => {
       if (!isCurrentEditable()) return;
-      // avoid toggling when clicking delete button
       if (e.target.closest(".del-btn")) return;
       li.classList.toggle("done");
     });
@@ -355,18 +350,17 @@
   lb.addEventListener("click", (e) => { if (e.target === lb) lb.classList.remove("open"); });
 
   // ===== Add form handlers (only visible when editable) =====
-  $("#addTimeline").addEventListener("click", () => {
+  $("#addTimeline")?.addEventListener("click", () => {
     if (!isCurrentEditable()) return;
     const date = prompt("Date (YYYY-MM-DD):") || "";
     const title = prompt("Title:") || "";
     const caption = prompt("Caption:") || "";
     const img = prompt("Image URL:") || "";
     const item = buildTimelineItem({ date, title, caption, img });
-    // place in correct order by date:
     $("#timelineList").appendChild(item);
   });
 
-  $("#addPhoto").addEventListener("click", () => {
+  $("#addPhoto")?.addEventListener("click", () => {
     if (!isCurrentEditable()) return;
     const img = prompt("Image URL:") || "";
     if (!img) return;
@@ -374,26 +368,26 @@
     $("#galleryGrid").appendChild(buildGalleryItem({ img, caption }));
   });
 
-  $("#addLetter").addEventListener("click", () => {
+  $("#addLetter")?.addEventListener("click", () => {
     if (!isCurrentEditable()) return;
     const title = prompt("Letter title:") || "";
     const body = prompt("Letter body (plain text or simple HTML):") || "";
     $("#lettersWrap").appendChild(buildLetter({ title, body }));
   });
 
-  $("#addBucket").addEventListener("click", () => {
+  $("#addBucket")?.addEventListener("click", () => {
     if (!isCurrentEditable()) return;
     const text = prompt("Bucket item text:") || "";
     if (!text) return;
     $("#bucketList").appendChild(buildBucketItem({ text, done:false }));
   });
 
-  $("#addQuiz").addEventListener("click", () => {
+  $("#addQuiz")?.addEventListener("click", () => {
     if (!isCurrentEditable()) return;
     const q = prompt("Question:") || "";
     const optsCSV = prompt("Options (comma-separated):") || "";
     const options = optsCSV.split(",").map(s => s.trim()).filter(Boolean);
-    if (!q || options.length < 2) { alert("Need a question and at least 2 options."); return; }
+    if ( !q || options.length < 2 ) { alert("Need a question and at least 2 options."); return; }
     let ans = parseInt(prompt(`Correct option index (1-${options.length}):`) || "1", 10);
     if (isNaN(ans) || ans < 1 || ans > options.length) ans = 1;
     const div = buildQuizQuestion({ q, options, answerIndex: ans-1 }, $$("#quizForm .quiz-q").length);
@@ -406,7 +400,6 @@
     const relationshipStart = $("#relationshipStart")?.value || ""; // read-only
     const nextMeetDate     = $("#nextMeetDate")?.value || "";
 
-    // timeline
     const timeline = $$("#timelineList .item").map(item => ({
       date: item.dataset.date || "",
       title: (item.querySelector(".title")?.textContent || "").replace(/^\s+|\s+$/g,""),
@@ -414,34 +407,30 @@
       img: item.dataset.img || (item.querySelector("img")?.src || "")
     }));
 
-    // gallery
     const gallery = $$("#galleryGrid > div").map(box => ({
       img: box.dataset.img || (box.querySelector("img")?.src || ""),
       caption: (box.querySelector(".gcap")?.textContent || "").replace(/^\s+|\s+$/g,"")
     }));
 
-    // letters
     const letters = $$("#lettersWrap .letter").map(card => ({
       title: (card.querySelector(".title")?.textContent || "").replace(/^\s+|\s+$/g,""),
       body: (card.querySelector(".body")?.innerHTML || "").trim()
     }));
 
-    // quiz
     const quiz = $$("#quizForm .quiz-q").map((div, i) => {
       const q = (div.querySelector(".qt")?.textContent || "").trim();
       const options = Array.from(div.querySelectorAll(".q-opt .opt")).map(s => s.textContent.trim());
       const checked = div.querySelector(`input[name="q${i}"]:checked`);
       const answerIndex = checked ? Number(checked.value) : 0;
       return { q, options, answerIndex };
-    });
+    }));
 
-    // bucket
     const bucket = $$("#bucketList li").map(li => ({
       text: li.querySelector(".btext")?.textContent.trim() || "",
       done: li.classList.contains("done")
     }));
 
-    const payload = {
+    return {
       relationshipStart,
       nextMeetDate,
       versions: {
@@ -456,29 +445,26 @@
         }
       }
     };
-    return payload;
   }
 
- // Get raw url from meta
-const META_RAW = document.querySelector('meta[name="us-raw-url"]')?.content || "";
+  // (DO NOT re-declare META_RAW here)  <-- removed duplicate
 
-$("#saveBtn").addEventListener("click", () => {
-  const data = collectDataForSave();
-  const payload = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
+  $("#saveBtn")?.addEventListener("click", () => {
+    const data = collectDataForSave();
+    const payload = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
 
-  // Build GitHub repo URL from META_RAW
-  const gh = (META_RAW && META_RAW.includes("/raw.githubusercontent.com/"))
-    ? META_RAW.replace("https://raw.githubusercontent.com/", "https://github.com/")
-              .replace(/\/content\/site-data\.json$/i, "")
-    : "https://github.com/hunlee690/us";
+    // Build GitHub repo URL from META_RAW
+    const gh = (META_RAW && META_RAW.includes("/raw.githubusercontent.com/"))
+      ? META_RAW.replace("https://raw.githubusercontent.com/", "https://github.com/")
+                .replace(/\/content\/site-data\.json$/i, "")
+      : "https://github.com/hunlee690/us";
 
-  const url = `${gh}/issues/new` +
-              `?title=${encodeURIComponent(`US-SITE-DATA update (${currentVersion})`)}` +
-              `&body=${encodeURIComponent(payload)}`;
+    const url = `${gh}/issues/new`
+              + `?title=${encodeURIComponent(`US-SITE-DATA update (${currentVersion})`)}`
+              + `&body=${encodeURIComponent(payload)}`;
 
-  window.open(url, "_blank");
-});
-
+    window.open(url, "_blank");
+  });
 
   // ===== Load everything =====
   async function loadEverything() {
@@ -501,6 +487,10 @@ $("#saveBtn").addEventListener("click", () => {
 
   // Boot
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {});
+    document.addEventListener("DOMContentLoaded", () => {
+      loadEverything(); // <-- call it so content renders behind the blur
+    });
+  } else {
+    loadEverything();   // <-- also handle already-interactive state
   }
 })();
