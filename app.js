@@ -518,22 +518,23 @@
   }
 
   // ===== Direct GitHub commit (no Actions needed)
-  function parseRepoFromMeta(metaRaw) {
-    const fallback = { owner: "hunlee690", repo: "us", branch: "main", path: "content/site-data.json" };
-    try {
-      if (!metaRaw || !metaRaw.includes("raw.githubusercontent.com/")) return fallback;
-      const url = new URL(metaRaw);
-      const parts = url.pathname.split("/").filter(Boolean);
-      // /<owner>/<repo>/<branch>/content/site-data.json
-      return {
-        owner: parts[1] || fallback.owner,
-        repo:  parts[2] || fallback.repo,
-        branch: parts[3] || fallback.branch,
-        path:  parts.slice(4).join("/") || fallback.path,
-      };
-    } catch { return fallback; }
+function parseRepoFromMeta(metaRaw) {
+  const fallback = { owner: "hunlee690", repo: "us", branch: "main", path: "content/site-data.json" };
+  try {
+    if (!metaRaw || !metaRaw.includes("raw.githubusercontent.com/")) return fallback;
+    const url = new URL(metaRaw);
+    const parts = url.pathname.split("/").filter(Boolean);
+    // Correct mapping for raw.githubusercontent.com/<owner>/<repo>/<branch>/...
+    return {
+      owner:  parts[0] || fallback.owner,
+      repo:   parts[1] || fallback.repo,
+      branch: parts[2] || fallback.branch,
+      path:   parts.slice(3).join("/") || fallback.path,
+    };
+  } catch {
+    return fallback;
   }
-
+}
   async function ghFetch(url, method, token, body) {
     const res = await fetch(url, {
       method,
@@ -659,3 +660,4 @@
     loadEverything();
   }
 })();
+
