@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <meta name="us-raw-url" content="https://raw.githubusercontent.com/hunlee690/us/main/content/site-data.json">
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title id="pageTitle">Us — Private Space 💌</title>
@@ -30,7 +31,7 @@
   <!-- Top nav -->
   <header class="nav">
     <div class="brand">
-      <span id="pageTitleInline" class="editable" contenteditable="false">Us — Private Space</span><span>❤️</span>
+      <span id="pageTitleInline" class="editable" contenteditable="true" data-placeholder="Type site title…">Us — Private Space</span><span>❤️</span>
     </div>
     <nav class="hide-on-mobile">
       <a href="#home">Home</a><a href="#timeline">Our Story</a><a href="#gallery">Gallery</a>
@@ -48,9 +49,9 @@
       <div class="hero-decoration" aria-hidden="true"></div>
       <div class="hero-title">
         <h1 class="type">
-          <span id="heroHeadline">Personal Title</span> ✨
+          <span id="heroHeadline" class="editable-block" contenteditable="true" data-placeholder="Type headline…">Personal Title</span> ✨
         </h1>
-        <p id="openingLine" class="subtitle editable" contenteditable="false"></p>
+        <p id="openingLine" class="subtitle editable editable-block" contenteditable="true" data-placeholder="Write a sweet opening line…"></p>
         <div class="row center" style="margin-top:12px">
           <button id="openSurprise" class="btn-primary" type="button">Open a surprise</button>
         </div>
@@ -67,6 +68,7 @@
             <label for="relationshipStart">Start date (static)</label>
             <div class="input">
               <div class="icon">📅</div>
+              <!-- stays read-only -->
               <input id="relationshipStart" type="date" class="editable-input" disabled/>
             </div>
           </div>
@@ -74,7 +76,8 @@
             <label for="nextMeetDate">Next meet</label>
             <div class="input">
               <div class="icon">🗓️</div>
-              <input id="nextMeetDate" type="date" class="editable-input" disabled/>
+              <!-- editable when current version matches login -->
+              <input id="nextMeetDate" type="date" class="editable-input" />
             </div>
           </div>
         </div>
@@ -94,6 +97,9 @@
     <!-- Timeline -->
     <section id="timeline" class="section">
       <h2>Our story</h2>
+      <div class="toolbar" data-edit-toolbar>
+        <button id="addTimeline" class="icon-btn" type="button">➕ Add timeline item</button>
+      </div>
       <div id="timelineList" class="timeline"></div>
       <div id="timelineEmpty" class="empty">add some moments.</div>
     </section>
@@ -101,6 +107,9 @@
     <!-- Gallery -->
     <section id="gallery" class="section">
       <h2>Moments I adore</h2>
+      <div class="toolbar" data-edit-toolbar>
+        <button id="addPhoto" class="icon-btn" type="button">➕ Add photo</button>
+      </div>
       <div id="galleryGrid" class="gallery-grid"></div>
       <div id="galleryEmpty" class="empty">No photos yet.</div>
     </section>
@@ -108,6 +117,9 @@
     <!-- Letters -->
     <section id="letters" class="section">
       <h2>Letters to you</h2>
+      <div class="toolbar" data-edit-toolbar>
+        <button id="addLetter" class="icon-btn" type="button">➕ Add letter</button>
+      </div>
       <div id="lettersWrap" class="letters"></div>
       <div id="lettersEmpty" class="empty">No letters yet.</div>
     </section>
@@ -115,14 +127,22 @@
     <!-- Playlist -->
     <section id="playlist" class="section">
       <h2>Our soundtrack</h2>
-      <div class="playlist-embed">
-        <iframe id="playlistFrame" width="100%" height="380" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"></iframe>
+      <div class="card">
+        <div class="stack">
+          <p class="empty">Paste an embeddable URL in the player’s src.</p>
+          <div class="playlist-embed">
+            <iframe id="playlistFrame" width="100%" height="380" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"></iframe>
+          </div>
+        </div>
       </div>
     </section>
 
     <!-- Quiz -->
     <section id="quiz" class="section">
       <h2>How well do you know “us”? 💘</h2>
+      <div class="toolbar" data-edit-toolbar>
+        <button id="addQuiz" class="icon-btn" type="button">➕ Add question</button>
+      </div>
       <form id="quizForm" class="quiz">
         <div class="q"></div>
         <button type="submit" class="btn-primary">Check answers</button>
@@ -134,13 +154,16 @@
     <!-- Bucket -->
     <section id="bucket" class="section">
       <h2>Our someday list</h2>
+      <div class="toolbar" data-edit-toolbar>
+        <button id="addBucket" class="icon-btn" type="button">➕ Add item</button>
+      </div>
       <ul id="bucketList" class="bucket"></ul>
       <div id="bucketEmpty" class="empty">Nothing here yet.</div>
     </section>
   </main>
 
   <footer class="footer">
-    <p>Made with ❤️ by <span id="yourName" class="editable" contenteditable="false">You</span> • <span id="year"></span></p>
+    <p>Made with ❤️ by <span id="yourName" class="editable" contenteditable="true" data-placeholder="Your name…">You</span> • <span id="year"></span></p>
   </footer>
 
   <!-- Lightbox -->
@@ -153,7 +176,7 @@
   <!-- Surprise Modal -->
   <dialog id="surprise">
     <h3>Surprise 🎁</h3>
-    <p id="surpriseMsg" class="editable" contenteditable="false"></p>
+    <p id="surpriseMsg" class="editable editable-block" contenteditable="true" data-placeholder="Write a surprise message…"></p>
     <button id="closeSurprise" class="btn-primary">Aww, thank you!</button>
   </dialog>
 </body>
