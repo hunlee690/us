@@ -1,52 +1,20 @@
 (function () {
   // ===== Passwords (hashed) =====
-  // wuvu  -> pinku
-  // wuvu2 -> hnnu
-  const HASH_WUVU  = "e980fba218c0efa78ca42f5e845884db9e36ab73a46ed4e8c29b896e546c6c0b";
-  const HASH_WUVU2 = "5d503713f5c18ef61e2a731093c0c26c5b6c65a9787eb974ea1c209d80279572";
-  const AUTH_KEY = "us_site_authed"; // kept but we still show gate on load
-  const VERSION_KEY = "us_site_version"; // persist last chosen version
+  const HASH_WUVU  = "e980fba218c0efa78ca42f5e845884db9e36ab73a46ed4e8c29b896e546c6c0b"; // pinku
+  const HASH_WUVU2 = "5d503713f5c18ef61e2a731093c0c26c5b6c65a9787eb974ea1c209d80279572"; // hnnu
+  const AUTH_KEY = "us_site_authed";
+  const VERSION_KEY = "us_site_version";
 
-  // ===== Scope + next-meet persistence & countdown =====
-  const AUTH_SCOPE_KEY = "us_site_auth_scope"; // 'pinku' or 'hnnu'
-  const NEXT_MEET_KEY  = "us_next_meet_date";
-  let countdownTimer = null;
-
-  function saveNextMeet(d) {
-    if (d) localStorage.setItem(NEXT_MEET_KEY, d);
-    else localStorage.removeItem(NEXT_MEET_KEY);
-  }
-  function loadNextMeet() { return localStorage.getItem(NEXT_MEET_KEY) || ""; }
-  function clearCountdown() { if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; } }
-  function fmt2(n){ return String(n).padStart(2,"0"); }
-  function startCountdown(targetISO) {
-    clearCountdown();
-    const el = document.getElementById("nextMeetCountdown");
-    if (!targetISO) { el.textContent = "—"; return; }
-    function tick() {
-      const now = new Date();
-      const target = new Date(targetISO);
-      let diffMs = target - now;
-      if (diffMs <= 0) { el.textContent = "Today! 🎉"; clearCountdown(); return; }
-      const totalSec = Math.floor(diffMs / 1000);
-      const days  = Math.floor(totalSec / (24*3600));
-      const rem1  = totalSec % (24*3600);
-      const hours = Math.floor(rem1 / 3600);
-      const rem2  = rem1 % 3600;
-      const mins  = Math.floor(rem2 / 60);
-      const secs  = rem2 % 60;
-      el.textContent = `${days}d ${fmt2(hours)}h ${fmt2(mins)}m ${fmt2(secs)}s`;
-    }
-    tick();
-    countdownTimer = setInterval(tick, 1000);
-  }
+  // ===== GitHub raw JSON (replace with your repo path) =====
+  const RAW_URL = "https://raw.githubusercontent.com/YOUR-USER/YOUR-REPO/main/content/site-data.json";
 
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => Array.from(document.querySelectorAll(s));
 
-  // Gate
+  // ===== Gate =====
   const gate = $("#gate");
   const authMsg = $("#authMsg");
+
   function showGate(msg = "") {
     authMsg.textContent = msg || "";
     document.documentElement.classList.add("gated");
@@ -72,35 +40,32 @@
       const h = await sha256Hex(pass);
       if (h === HASH_WUVU) {
         localStorage.setItem(AUTH_KEY, "1");
-        localStorage.setItem(AUTH_SCOPE_KEY, "pinku");
         setVersion("pinku", true);
         hideGate(); loadEverything();
       } else if (h === HASH_WUVU2) {
         localStorage.setItem(AUTH_KEY, "1");
-        localStorage.setItem(AUTH_SCOPE_KEY, "hnnu");
         setVersion("hnnu", true);
         hideGate(); loadEverything();
       } else {
         authMsg.textContent = "Wrong password.";
       }
     } catch (e) {
-      authMsg.textContent = "Your browser blocked crypto. Try a modern browser.";
+      authMsg.textContent = "Crypto not supported.";
     }
   }
 
   function signOut() {
     localStorage.removeItem(AUTH_KEY);
-    localStorage.removeItem(AUTH_SCOPE_KEY);
     showGate("");
   }
 
   $("#gSignin").onclick = trySignin;
   $("#signOut").onclick = signOut;
 
-  // IMPORTANT: Always require password on first load (no auto-unlock)
+  // Always require login
   showGate("");
 
-  // ===== Version (hnnu ↔ pinku) =====
+  // ===== Version toggle =====
   const qs = new URLSearchParams(location.search);
   const DEFAULT_VERSION = localStorage.getItem(VERSION_KEY) || "hnnu";
   function getInitialVersion() {
@@ -117,27 +82,26 @@
   }
   setVersion(currentVersion);
 
-  // Editability based on password scope + current version
-  function applyEditability() {
-    const scope = localStorage.getItem(AUTH_SCOPE_KEY);   // 'pinku' or 'hnnu'
-    const editable = (scope === "pinku" && currentVersion === "pinku");
-    const nextMeetInput = document.getElementById("nextMeetDate");
-    if (nextMeetInput) nextMeetInput.disabled = !editable;
-  }
-
   $("#versionToggle").addEventListener("click", () => {
     const next = currentVersion === "hnnu" ? "pinku" : "hnnu";
     const url = new URL(location.href); url.searchParams.set("v", next);
     history.replaceState({}, "", url);
     setVersion(next, true);
-    applyEditability();
     loadEverything();
   });
 
-  // ===== Data (from data.js) =====
-  const SITE_DATA = window.SITE_DATA || {};
+  // ===== Load data =====
+  async function fetchSiteData() {
+    try {
+      const res = await fetch(RAW_URL, { cache: "no-store" });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn("Fetch failed, using fallback:", e);
+    }
+    return window.SITE_DATA || {};
+  }
 
-  function getProfile(v) {
+  function getProfile(v, SITE_DATA) {
     const base = {
       relationship_start: SITE_DATA.relationshipStart || "",
       next_meet_date: SITE_DATA.nextMeetDate || "",
@@ -160,46 +124,35 @@
   }
 
   // ===== Renderers =====
-function renderBasics(p) {
-  $("#pageTitle").textContent = "Us — Private Space 💌";
-  $("#pageTitleInline").textContent = "Us — Private Space";
-  document.title = $("#pageTitle").textContent;
+  function renderBasics(p) {
+    $("#pageTitle").textContent = "Us — Private Space 💌";
+    $("#pageTitleInline").textContent = "Us — Private Space";
+    document.title = $("#pageTitle").textContent;
 
-  $("#yourName").textContent = p.your_name || "hnnu";
-  // removed: $("#herName").textContent = p.her_name || "My Love";
+    $("#yourName").textContent = p.your_name || "You";
+    if ($("#herName")) $("#herName").textContent = p.her_name || "My Love";
+    $("#openingLine").textContent = p.opening_line || "";
 
-  $("#openingLine").textContent = p.opening_line || "";
+    $("#relationshipStart").value = p.relationship_start || "";
+    $("#nextMeetDate").value = p.next_meet_date || "";
 
-  $("#relationshipStart").value = p.relationship_start || "";
-  $("#nextMeetDate").value = p.next_meet_date || "";
+    $("#surpriseMsg").textContent = p.surprise_message || "";
+    $("#playlistFrame").src = p.playlist_src || "";
 
-  $("#surpriseMsg").textContent = p.surprise_message || "";
-  $("#playlistFrame").src = p.playlist_src || "";
-
-  // default now says "Personal Title"
-  $("#heroHeadline").textContent = p.hero_headline || "Personal Title";
-  $("#year").textContent = new Date().getFullYear();
-}
+    $("#heroHeadline").textContent = p.hero_headline || "Welcome";
+    $("#year").textContent = new Date().getFullYear();
+  }
 
   function fmtDays(n) { return `${n} day${n === 1 ? "" : "s"}`; }
   function daysBetween(a, b) { return Math.floor(Math.abs(b - a) / (1000 * 60 * 60 * 24)); }
   function renderCounters(p) {
-    // Static start date
-    const start = new Date("2022-09-05");
+    const start = p.relationship_start ? new Date(p.relationship_start) : null;
+    const next = p.next_meet_date ? new Date(p.next_meet_date) : null;
     const now = new Date();
-    $("#daysTogether").textContent = fmtDays(daysBetween(start, now));
-
-    // Live countdown
-    const nextIso = loadNextMeet() || p.next_meet_date || "";
-    if (nextIso) startCountdown(nextIso);
-    else { clearCountdown(); $("#nextMeetCountdown").textContent = "—"; }
+    $("#daysTogether").textContent = start ? fmtDays(daysBetween(start, now)) : "—";
+    const until = next ? Math.max(0, daysBetween(now, next)) : null;
+    $("#nextMeetCountdown").textContent = until === null ? "—" : (until === 0 ? "Today! 🎉" : fmtDays(until));
   }
-
-  // Lightbox
-  const lb = $("#lightbox"), lbImg = lb.querySelector(".lightbox-img"), lbCap = lb.querySelector(".lightbox-cap");
-  function openLightbox(src, cap) { lbImg.src = src; lbCap.textContent = cap || ""; lb.classList.add("open"); lb.setAttribute("aria-hidden", "false"); }
-  lb.querySelector(".lightbox-close").addEventListener("click", () => lb.classList.remove("open"));
-  lb.addEventListener("click", (e) => { if (e.target === lb) lb.classList.remove("open"); });
 
   async function renderTimeline(items) {
     const wrap = $("#timelineList"); wrap.innerHTML = "";
@@ -250,58 +203,30 @@ function renderBasics(p) {
     });
   }
 
-function renderQuiz(items) {
-  const form = $("#quizForm");
-  const qBox = form.querySelector(".q");
-  qBox.innerHTML = "";
-
-  if (!items.length) {
-    $("#quizEmpty").classList.remove("hidden");
-    return;
+  function renderQuiz(items) {
+    const form = $("#quizForm"); const qBox = form.querySelector(".q"); qBox.innerHTML = "";
+    if (!items.length) { $("#quizEmpty").classList.remove("hidden"); return; }
+    $("#quizEmpty").classList.add("hidden");
+    items.forEach((row, i) => {
+      const name = `q${i}`;
+      const div = document.createElement("div");
+      let inner = `<div class="q-title"><strong>${i + 1}.</strong> ${row.q || row.question || ""}</div>`;
+      (row.options || []).forEach((opt, j) => {
+        inner += `<label><input type="radio" name="${name}" value="${j}" required/> ${opt}</label>`;
+      });
+      div.innerHTML = inner; qBox.appendChild(div);
+    });
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      let score = 0;
+      items.forEach((row, i) => {
+        const ans = typeof row.answerIndex === "number" ? row.answerIndex : row.answer_index;
+        if (Number(fd.get(`q${i}`)) === ans) score++;
+      });
+      $("#quizResult").textContent = `Score: ${score}/${items.length} ${score === items.length ? "💖 Perfect!" : ""}`;
+    };
   }
-  $("#quizEmpty").classList.add("hidden");
-
-  items.forEach((row, i) => {
-    const name = `q${i}`;
-
-    // Build option objects with correctness flags
-    const correctIdx = (typeof row.answerIndex === "number") ? row.answerIndex : row.answer_index;
-    const opts = (row.options || []).map((text, idx) => ({
-      text,
-      isCorrect: idx === correctIdx
-    }));
-
-    // Fisher–Yates shuffle
-    for (let j = opts.length - 1; j > 0; j--) {
-      const k = Math.floor(Math.random() * (j + 1));
-      [opts[j], opts[k]] = [opts[k], opts[j]];
-    }
-
-    // Render question + randomized options
-    const div = document.createElement("div");
-    let inner = `<div class="q-title"><strong>${i + 1}.</strong> ${row.q || row.question || ""}</div>`;
-    opts.forEach((opt) => {
-      // store correctness in the radio value: "1" correct, "0" incorrect
-      inner += `<label><input type="radio" name="${name}" value="${opt.isCorrect ? "1" : "0"}" required/> ${opt.text}</label>`;
-    });
-    div.innerHTML = inner;
-    qBox.appendChild(div);
-  });
-
-  // Score by summing the values (1 for correct choice, 0 otherwise)
-  form.onsubmit = (e) => {
-    e.preventDefault();
-    const fd = new FormData(form);
-    let score = 0;
-    items.forEach((_, i) => {
-      score += Number(fd.get(`q${i}`) || 0);
-    });
-    const total = items.length;
-    const flair = score === total ? "💖 Perfect!" : score >= Math.ceil(total * 0.6) ? "✨ Nice!" : "🌱 Keep going!";
-    $("#quizResult").textContent = `Score: ${score}/${total} ${flair}`;
-  };
-}
-
 
   function renderBucket(items) {
     const ul = $("#bucketList"); ul.innerHTML = "";
@@ -314,7 +239,13 @@ function renderQuiz(items) {
     });
   }
 
-  // Surprise + smooth scroll
+  // Lightbox
+  const lb = $("#lightbox"), lbImg = lb.querySelector(".lightbox-img"), lbCap = lb.querySelector(".lightbox-cap");
+  function openLightbox(src, cap) { lbImg.src = src; lbCap.textContent = cap || ""; lb.classList.add("open"); lb.setAttribute("aria-hidden", "false"); }
+  lb.querySelector(".lightbox-close").addEventListener("click", () => lb.classList.remove("open"));
+  lb.addEventListener("click", (e) => { if (e.target === lb) lb.classList.remove("open"); });
+
+  // Surprise
   const surprise = $("#surprise");
   $("#openSurprise").addEventListener("click", () => {
     if (typeof surprise.showModal === "function") surprise.showModal();
@@ -334,10 +265,38 @@ function renderQuiz(items) {
     });
   });
 
+  // ===== Save button: open GitHub Issue =====
+  function collectDataForSave() {
+    return {
+      relationshipStart: $("#relationshipStart").value || "",
+      nextMeetDate: $("#nextMeetDate").value || "",
+      versions: {
+        [currentVersion]: {
+          heroHeadline: $("#heroHeadline").textContent.trim(),
+          yourName: $("#yourName").textContent.trim(),
+          herName: $("#herName")?.textContent.trim() || "",
+          openingLine: $("#openingLine").textContent.trim(),
+          surpriseMessage: $("#surpriseMsg").textContent.trim(),
+          playlistEmbed: { src: $("#playlistFrame").src }
+          // TODO: add collectors for timeline/gallery/etc. if you want to edit them live
+        }
+      }
+    };
+  }
 
-  // Load everything (only after gate is unlocked)
-  function loadEverything() {
-    const p = getProfile(currentVersion);
+  $("#saveBtn").addEventListener("click", () => {
+    const data = collectDataForSave();
+    const payload = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
+    const url = `https://github.com/YOUR-USER/YOUR-REPO/issues/new` +
+                `?title=${encodeURIComponent("US-SITE-DATA update")}` +
+                `&body=${encodeURIComponent(payload)}`;
+    window.open(url, "_blank");
+  });
+
+  // ===== Load everything =====
+  async function loadEverything() {
+    const SITE_DATA = await fetchSiteData();
+    const p = getProfile(currentVersion, SITE_DATA);
     renderBasics(p);
     renderCounters(p);
     renderTimeline(p.timeline);
@@ -345,23 +304,6 @@ function renderQuiz(items) {
     renderLetters(p.letters);
     renderQuiz(p.quiz);
     renderBucket(p.bucket);
-    applyEditability();
   }
-  // === Next-meet handlers: save immediately and (re)start the live countdown ===
-const nextMeetInput = document.getElementById("nextMeetDate");
 
-function applyNextMeet(val) {
-  // persist to browser storage
-  if (val) localStorage.setItem("us_next_meet_date", val);
-  else localStorage.removeItem("us_next_meet_date");
-
-  // start/restart the ticking countdown right away
-  startCountdown(val || "");
-}
-
-// Fire as soon as the user picks/changes the date
-if (nextMeetInput) {
-  nextMeetInput.addEventListener("input",  () => applyNextMeet(nextMeetInput.value));
-  nextMeetInput.addEventListener("change", () => applyNextMeet(nextMeetInput.value));
-}
 })();
