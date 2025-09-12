@@ -4,6 +4,7 @@
   const HASH_WUVU2 = "5d503713f5c18ef61e2a731093c0c26c5b6c65a9787eb974ea1c209d80279572"; // hnnu
 
   const VERSION_KEY = "us_site_version"; // persist viewing version only
+  const NEXT_MEET_KEY = "nextMeetISO";    // shared across both pages immediately
 
   const $  = (s) => document.querySelector(s);
   const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -113,7 +114,8 @@
   function getProfile(v, SITE_DATA) {
     const base = {
       relationship_start: SITE_DATA.relationshipStart || "",
-      next_meet_date: SITE_DATA.nextMeetDate || "",
+      // Prefer localStorage for immediate shared experience; fallback to JSON
+      next_meet_date: (localStorage.getItem(NEXT_MEET_KEY) || SITE_DATA.nextMeetDate || "")
     };
     const ver = (SITE_DATA.versions && SITE_DATA.versions[v]) || {};
     return {
@@ -177,6 +179,14 @@
     $$(".del-btn").forEach(btn => btn.style.display = canEdit ? "inline-flex" : "none");
   }
 
+  // ===== Helpers =====
+  function toDatetimeLocalValue(d) {
+    // Format as YYYY-MM-DDTHH:MM for <input type="datetime-local">
+    if (!(d instanceof Date) || isNaN(d)) return "";
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
   // ===== Renderers =====
   function renderBasics(p) {
     $("#pageTitle").textContent = "Us — Private Space 💌";
@@ -188,7 +198,13 @@
     $("#openingLine").textContent = p.opening_line || "";
 
     $("#relationshipStart").value = p.relationship_start || "";
-    $("#nextMeetDate").value = p.next_meet_date || "";
+
+    // Next meet: support datetime-local and localStorage
+    const nextMeetInput = $("#nextMeetDate");
+    const nextFrom = p.next_meet_date ? new Date(p.next_meet_date) : null;
+    if (nextMeetInput) {
+      nextMeetInput.value = nextFrom ? toDatetimeLocalValue(nextFrom) : "";
+    }
 
     $("#surpriseMsg").textContent = p.surprise_message || "";
     $("#playlistFrame").src = p.playlist_src || "";
@@ -201,13 +217,45 @@
 
   function fmtDays(n) { return `${n} day${n === 1 ? "" : "s"}`; }
   function daysBetween(a, b) { return Math.floor(Math.abs(b - a) / (1000 * 60 * 60 * 24)); }
+
+  function startLiveCountdown(nextDate) {
+    const nextMeetEl = $("#nextMeetCountdown");
+    const daysTogetherEl = $("#daysTogether");
+    const start = $("#relationshipStart")?.value ? new Date($("#relationshipStart").value) : null;
+
+    function renderOnce() {
+      const now = new Date();
+      if (start && daysTogetherEl) daysTogetherEl.textContent = fmtDays(daysBetween(start, now));
+
+      if (!(nextDate instanceof Date) || isNaN(nextDate)) {
+        if (nextMeetEl) nextMeetEl.textContent = "—";
+        return;
+      }
+      const diff = nextDate - now;
+      if (diff <= 0) {
+        nextMeetEl.textContent = "Now! 🎉";
+        return;
+      }
+      const s = Math.floor(diff / 1000);
+      const d = Math.floor(s / 86400);
+      const h = Math.floor((s % 86400) / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      nextMeetEl.textContent = `${d}d ${h}h ${m}m ${sec}s`;
+    }
+
+    clearInterval(window.__meetTimer);
+    renderOnce();
+    window.__meetTimer = setInterval(renderOnce, 1000);
+  }
+
   function renderCounters(p) {
     const start = p.relationship_start ? new Date(p.relationship_start) : null;
-       const next = p.next_meet_date ? new Date(p.next_meet_date) : null;
     const now = new Date();
     $("#daysTogether").textContent = start ? fmtDays(daysBetween(start, now)) : "—";
-    const until = next ? Math.max(0, daysBetween(now, next)) : null;
-    $("#nextMeetCountdown").textContent = (until === null ? "—" : (until === 0 ? "Today! 🎉" : fmtDays(until)));
+
+    const next = p.next_meet_date ? new Date(p.next_meet_date) : null;
+    startLiveCountdown(next);
   }
 
   // Helpers to create delete buttons
@@ -295,11 +343,27 @@
     return card;
   }
 
-  // Quiz CRUD
+  // ===== QUIZ =====
   function renderQuiz(items) {
-    const form = $("#quizForm"); const qBox = form.querySelector(".q"); qBox.innerHTML = "";
+    const form = $("#quizForm"); if (!form) return;
+    const qBox = form.querySelector(".q"); qBox.innerHTML = "";
     if (!items.length) { $("#quizEmpty").classList.remove("hidden"); } else { $("#quizEmpty").classList.add("hidden"); }
+
     items.forEach((row, i) => qBox.appendChild(buildQuizQuestion(row, i)));
+
+    // Submit handler (score without locking or reloading)
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const allQs = $$("#quizForm .quiz-q");
+      let correct = 0;
+      allQs.forEach((qDiv, idx) => {
+        const ans = Number(qDiv.dataset.answerIndex ?? -1);
+        const picked = qDiv.querySelector(`input[name="q${idx}"]:checked`);
+        if (picked && Number(picked.value) === ans) correct++;
+      });
+      const result = `${correct} / ${allQs.length} correct! 🎉`;
+      $("#quizResult").textContent = result;
+    }, { once: true }); // once per render
   }
   function buildQuizQuestion(row = {}, idx = 0) {
     const div = document.createElement("div");
@@ -307,12 +371,15 @@
     const opts = row.options || [];
     const qTitle = (row.q || row.question || "");
     const ans = (typeof row.answerIndex === "number") ? row.answerIndex : row.answer_index;
+    div.dataset.answerIndex = (typeof ans === "number" ? String(ans) : "-1");
+
     let inner = `<div class="q-title" contenteditable="${isCurrentEditable()}"><strong>${idx + 1}.</strong> <span class="qt">${qTitle}</span></div>`;
     inner += `<div class="q-opts">`;
     opts.forEach((opt, j) => {
       inner += `
         <label class="q-opt">
-          <input type="radio" name="q${idx}" value="${j}" required ${j===ans?'checked':''}/>
+          <!-- no 'checked' here on purpose -->
+          <input type="radio" name="q${idx}" value="${j}" required />
           <span class="opt" contenteditable="${isCurrentEditable()}">${opt}</span>
         </label>`;
     });
@@ -398,7 +465,11 @@
   // ===== Save: collect only CURRENT VERSION (DOM → JSON)
   function collectDataForSave() {
     const relationshipStart = $("#relationshipStart")?.value || ""; // read-only
-    const nextMeetDate     = $("#nextMeetDate")?.value || "";
+
+    // Prefer localStorage for nextMeet (so both pages share immediately)
+    const nextMeetLocal = localStorage.getItem(NEXT_MEET_KEY) || "";
+    const nextMeetFromInput = $("#nextMeetDate")?.value || "";
+    const nextMeetDate = nextMeetLocal || nextMeetFromInput;
 
     const timeline = $$("#timelineList .item").map(item => ({
       date: item.dataset.date || "",
@@ -420,8 +491,7 @@
     const quiz = $$("#quizForm .quiz-q").map((div, i) => {
       const q = (div.querySelector(".qt")?.textContent || "").trim();
       const options = Array.from(div.querySelectorAll(".q-opt .opt")).map(s => s.textContent.trim());
-      const checked = div.querySelector(`input[name="q${i}"]:checked`);
-      const answerIndex = checked ? Number(checked.value) : 0;
+      const answerIndex = Number(div.dataset.answerIndex ?? 0);
       return { q, options, answerIndex };
     });
 
@@ -447,24 +517,58 @@
     };
   }
 
-  // (DO NOT re-declare META_RAW here)  <-- removed duplicate
-
+  // ===== Save button (fix GitHub URL so it doesn't 404)
   $("#saveBtn")?.addEventListener("click", () => {
     const data = collectDataForSave();
     const payload = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
 
-    // Build GitHub repo URL from META_RAW
-    const gh = (META_RAW && META_RAW.includes("/raw.githubusercontent.com/"))
-      ? META_RAW.replace("https://raw.githubusercontent.com/", "https://github.com/")
-                .replace(/\/content\/site-data\.json$/i, "")
-      : "https://github.com/hunlee690/us";
+    // Build GitHub repo URL from META_RAW robustly → https://github.com/<user>/<repo>
+    let ghBase = "https://github.com/hunlee690/us";
+    if (META_RAW && META_RAW.includes("raw.githubusercontent.com/")) {
+      ghBase = META_RAW
+        .replace("https://raw.githubusercontent.com/", "https://github.com/")
+        // strip /main/content/site-data.json (and tolerate blob/raw if present)
+        .replace(/\/(blob|raw)?\/?main\/content\/site-data\.json$/i, "")
+        // also tolerate just /content/site-data.json (no branch)
+        .replace(/\/content\/site-data\.json$/i, "");
+    }
 
-    const url = `${gh}/issues/new`
+    const url = `${ghBase}/issues/new`
               + `?title=${encodeURIComponent(`US-SITE-DATA update (${currentVersion})`)}`
               + `&body=${encodeURIComponent(payload)}`;
 
     window.open(url, "_blank");
   });
+
+  // ===== Surprise modal small wiring (optional nicety)
+  $("#openSurprise")?.addEventListener("click", () => $("#surprise")?.showModal());
+  $("#closeSurprise")?.addEventListener("click", () => $("#surprise")?.close());
+
+  // ===== Wire Next Meet input for immediate live countdown + sharing
+  function initNextMeetInput() {
+    const input = $("#nextMeetDate");
+    if (!input) return;
+
+    const applyFromInput = () => {
+      if (!isCurrentEditable()) return;
+      if (!input.value) {
+        localStorage.removeItem(NEXT_MEET_KEY);
+        startLiveCountdown(null);
+        return;
+      }
+      const d = new Date(input.value);
+      if (isNaN(d)) return;
+      localStorage.setItem(NEXT_MEET_KEY, d.toISOString());
+      startLiveCountdown(d);
+    };
+
+    input.addEventListener("change", applyFromInput);
+    input.addEventListener("input", applyFromInput);
+
+    // If we already have a stored date, ensure countdown starts immediately
+    const iso = localStorage.getItem(NEXT_MEET_KEY);
+    if (iso) startLiveCountdown(new Date(iso));
+  }
 
   // ===== Load everything =====
   async function loadEverything() {
@@ -478,6 +582,7 @@
       renderLetters(p.letters);
       renderQuiz(p.quiz);
       renderBucket(p.bucket);
+      initNextMeetInput();
     } catch (e) {
       console.error("Failed to load & render site data:", e);
       const err = $("#error");
@@ -488,9 +593,9 @@
   // Boot
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {
-      loadEverything(); // <-- call it so content renders behind the blur
+      loadEverything(); // render behind blur
     });
   } else {
-    loadEverything();   // <-- also handle already-interactive state
+    loadEverything();
   }
 })();
