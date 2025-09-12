@@ -1,70 +1,41 @@
-name: site-data from Issues
+name: Update site-data.json from Issue
 
 on:
   issues:
-    types: [opened, edited, reopened]
+    types: [opened, edited, labeled]
 
 permissions:
   contents: write
   issues: write
 
-concurrency:
-  group: site-data-update
-  cancel-in-progress: false
-
 jobs:
   update:
-    if: contains(github.event.issue.title, 'US-SITE-DATA')
+    if: contains(github.event.issue.title, 'US-SITE-DATA update')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Ensure content directory
-        run: mkdir -p content
-
-      - name: Decode JSON from issue body
-        shell: bash
+      - name: Decode payload from issue body
+        id: decode
         run: |
-          # Issue body is a base64 string produced by your site
-          printf '%s' "${{ github.event.issue.body }}" | base64 --decode > content/site-data.json
+          BODY=$(jq -r '.issue.body' "$GITHUB_EVENT_PATH")
+          # body is base64 JSON string from the site
+          echo "$BODY" | base64 --decode > content/site-data.json
+          echo "decoded=true" >> $GITHUB_OUTPUT
 
-          # Validate JSON
-          node -e "JSON.parse(require('fs').readFileSync('content/site-data.json','utf8'))"
-
-      - name: Commit changes (if any)
-        shell: bash
+      - name: Commit & push
+        if: steps.decode.outputs.decoded == 'true'
         run: |
-          if git diff --quiet -- content/site-data.json; then
-            echo "No changes to commit"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add content/site-data.json
-            git commit -m "Update site-data.json via issue #${{ github.event.issue.number }}"
-            git push
-          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add content/site-data.json
+          git commit -m "Update site-data.json from issue #${{ github.event.issue.number }}" || echo "No changes"
+          git push
 
-      - name: Comment and close issue
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const issue_number = context.issue.number;
-            await github.rest.issues.createComment({
-              ...context.repo,
-              issue_number,
-              body: "✅ Data saved to **content/site-data.json** and committed."
-            });
-            await github.rest.issues.update({
-              ...context.repo,
-              issue_number,
-              state: "closed"
-            });
+      - name: Comment on issue
+        run: |
+          gh issue comment ${{ github.event.issue.number }} -b "✅ site-data.json updated!"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
