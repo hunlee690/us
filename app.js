@@ -3,108 +3,61 @@
   const HASH_WUVU  = "e980fba218c0efa78ca42f5e845884db9e36ab73a46ed4e8c29b896e546c6c0b"; // pinku
   const HASH_WUVU2 = "5d503713f5c18ef61e2a731093c0c26c5b6c65a9787eb974ea1c209d80279572"; // hnnu
 
-  // We intentionally do NOT persist/restore auth anymore
-  const VERSION_KEY = "us_site_version";
+  const VERSION_KEY = "us_site_version"; // persist viewing version only
 
   const $  = (s) => document.querySelector(s);
   const $$ = (s) => Array.from(document.querySelectorAll(s));
 
-  // ===== Ensure Gate UI exists (so the prompt ALWAYS shows) =====
-  function ensureGateUI() {
-    let gate = $("#gate");
-    if (!gate) {
-      gate = document.createElement("div");
-      gate.id = "gate";
-      gate.innerHTML = `
-        <div class="gate-card" style="
-          max-width:420px;margin:auto;padding:20px;border-radius:12px;
-          background:#fff;box-shadow:0 10px 30px rgba(0,0,0,.1);text-align:center
-        ">
-          <h2 style="margin:0 0 8px;">Private Space</h2>
-          <p id="authMsg" style="min-height:1.5em;color:#444;margin:0 0 10px;"></p>
-          <input id="gPass" type="password" placeholder="Enter password" autocomplete="current-password"
-                 style="width:100%;padding:10px;border-radius:8px;border:1px solid #ccc;margin-bottom:10px;">
-          <button id="gSignin" class="btn-primary" style="
-            width:100%;padding:10px;border:0;border-radius:8px;cursor:pointer
-          ">Enter</button>
-        </div>`;
-      Object.assign(gate.style, {
-        position:"fixed", inset:"0", display:"grid", placeItems:"center",
-        background:"rgba(240,240,245,.9)", zIndex:"9999"
-      });
-      document.body.appendChild(gate);
-    } else {
-      // make sure required children exist
-      if (!$("#authMsg")) {
-        const p = document.createElement("p"); p.id = "authMsg"; gate.prepend(p);
-      }
-      if (!$("#gPass")) {
-        const input = document.createElement("input"); input.id = "gPass"; input.type = "password";
-        gate.appendChild(input);
-      }
-      if (!$("#gSignin")) {
-        const btn = document.createElement("button"); btn.id = "gSignin"; btn.textContent = "Enter";
-        gate.appendChild(btn);
-      }
-    }
-    document.documentElement.classList.add("gated");
-    gate.style.display = "grid";
-    return gate;
-  }
-
+  // ===== Gate (always ask on load) =====
   function showGate(msg = "") {
-    ensureGateUI();
-    const gate = $("#gate");
-    const authMsg = $("#authMsg");
-    if (authMsg) authMsg.textContent = msg || "";
+    $("#authMsg").textContent = msg || "";
     document.documentElement.classList.add("gated");
-    gate.style.display = "grid";
+    $("#gate").style.display = "grid";
   }
   function hideGate() {
-    const gate = $("#gate");
-    const authMsg = $("#authMsg");
-    if (authMsg) authMsg.textContent = "";
+    $("#authMsg").textContent = "";
     document.documentElement.classList.remove("gated");
-    if (gate) gate.style.display = "none";
+    $("#gate").style.display = "none";
   }
-
   async function sha256Hex(str) {
     const enc = new TextEncoder().encode(str);
     const buf = await crypto.subtle.digest("SHA-256", enc);
     return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
   }
 
+  let allowedVersion = null; // "pinku" | "hnnu" | null
+
   async function trySignin() {
-    const passEl = $("#gPass");
-    const msgEl  = $("#authMsg");
-    const pass = passEl?.value.trim() || "";
-    if (!pass) { if (msgEl) msgEl.textContent = "Enter the password."; return; }
-    if (msgEl) msgEl.textContent = "Checking…";
+    const pass = $("#gPass").value.trim();
+    if (!pass) { $("#authMsg").textContent = "Enter the password."; return; }
+    $("#authMsg").textContent = "Checking…";
     try {
       const h = await sha256Hex(pass);
       if (h === HASH_WUVU) {
+        allowedVersion = "pinku";
         setVersion("pinku", true);
         hideGate(); loadEverything();
       } else if (h === HASH_WUVU2) {
+        allowedVersion = "hnnu";
         setVersion("hnnu", true);
         hideGate(); loadEverything();
       } else {
-        if (msgEl) msgEl.textContent = "Wrong password.";
+        $("#authMsg").textContent = "Wrong password.";
       }
     } catch (e) {
-      if (msgEl) msgEl.textContent = "Crypto not supported.";
+      $("#authMsg").textContent = "Crypto not supported.";
     }
   }
-
-  // Always require login on each load
-  function wireGate() {
-    const gate = ensureGateUI();
-    $("#gSignin").onclick = trySignin;
-    // Enter key submits
-    $("#gPass").addEventListener("keydown", (e) => { if (e.key === "Enter") trySignin(); });
+  function signOut() {
+    allowedVersion = null;
+    showGate("");
   }
+  $("#gSignin").onclick = trySignin;
+  $("#gPass").addEventListener("keydown", (e) => { if (e.key === "Enter") trySignin(); });
+  $("#signOut").onclick = signOut;
+  showGate("");
 
-  // ===== Version toggle (keeps persistence for version ONLY) =====
+  // ===== Version handling =====
   const qs = new URLSearchParams(location.search);
   const DEFAULT_VERSION = localStorage.getItem(VERSION_KEY) || "hnnu";
   function getInitialVersion() {
@@ -112,48 +65,49 @@
     return (v === "hnnu" || v === "pinku") ? v : "hnnu";
   }
   let currentVersion = getInitialVersion();
-
   function setVersion(v, persist = false) {
     currentVersion = v;
     document.documentElement.setAttribute("data-version", v);
-    const t = $("#versionToggle .tag");
-    if (t) t.textContent = v;
+    $("#versionToggle .tag").textContent = v;
     if (persist) localStorage.setItem(VERSION_KEY, v);
+    applyEditability();
   }
   setVersion(currentVersion);
 
-  $("#versionToggle")?.addEventListener("click", () => {
+  $("#versionToggle").addEventListener("click", () => {
     const next = currentVersion === "hnnu" ? "pinku" : "hnnu";
     const url = new URL(location.href); url.searchParams.set("v", next);
     history.replaceState({}, "", url);
     setVersion(next, true);
-    // Only reload content after successful login; gate stays in control
-    if ($("#gate")?.style.display === "none") loadEverything();
+    loadEverything();
   });
 
-  // ===== Data loading (local JSON first; safe fallbacks) =====
-  async function fetchSiteData() {
-    // 1) Inline JSON in HTML
+  // ===== Data loading (local JSON first; fallbacks) =====
+  const META_RAW = document.querySelector('meta[name="us-raw-url"]')?.content || "";
+  const LOCAL_JSON_URL = new URL("./site-data.json", document.baseURI).toString();
+
+  async function fetchJSON(url) {
+    const u = new URL(url, document.baseURI);
+    u.searchParams.set("_", Date.now().toString(36)); // cache-bust
+    const res = await fetch(u.toString(), { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    return await res.json();
+  }
+  function parseInlineSiteData() {
     try {
       const tag = document.getElementById("site-data");
-      if (tag?.textContent?.trim()) return JSON.parse(tag.textContent);
-    } catch (e) {
-      console.warn("Inline site-data parse failed:", e);
+      if (!tag?.textContent?.trim()) return null;
+      return JSON.parse(tag.textContent);
+    } catch { return null; }
+  }
+  async function fetchSiteData() {
+    const inline = parseInlineSiteData();
+    if (inline) return inline;
+    try { return await fetchJSON(LOCAL_JSON_URL); } catch (e) {}
+    if (META_RAW && !/YOUR-USER|YOUR-REPO/i.test(META_RAW)) {
+      try { return await fetchJSON(META_RAW); } catch (e) {}
     }
-    // 2) Local file next to index.html
-    try {
-      const url = new URL("./site-data.json", document.baseURI);
-      url.searchParams.set("_", Date.now().toString(36)); // cache-bust
-      const res = await fetch(url.toString(), { cache: "no-store" });
-      if (res.ok) return await res.json();
-      console.warn("site-data.json HTTP", res.status, res.statusText);
-    } catch (e) {
-      console.warn("Local site-data.json fetch failed:", e);
-    }
-    // 3) window.SITE_DATA fallback (if preloaded)
-    if (window.SITE_DATA) return window.SITE_DATA;
-    // 4) Last resort: empty shell
-    return { relationshipStart: "", nextMeetDate: "", versions: {} };
+    return window.SITE_DATA || { relationshipStart:"", nextMeetDate:"", versions:{} };
   }
 
   function getProfile(v, SITE_DATA) {
@@ -178,24 +132,76 @@
     };
   }
 
-  // ===== Renderers (null-safe) =====
+  // ===== Editability controller =====
+  function isCurrentEditable() {
+    return allowedVersion && allowedVersion === currentVersion;
+  }
+  function showToolbars(show) {
+    $$("[data-edit-toolbar]").forEach(tb => tb.style.display = show ? "flex" : "none");
+    document.documentElement.toggleAttribute("data-locked", !show);
+  }
+  function applyEditability() {
+    const canEdit = isCurrentEditable();
+
+    // Inline fields
+    ["#pageTitleInline", "#heroHeadline", "#openingLine", "#surpriseMsg", "#yourName"]
+      .map(s => $(s)).filter(Boolean)
+      .forEach(n => n.setAttribute("contenteditable", canEdit ? "true" : "false"));
+
+    // Dates
+    const rel = $("#relationshipStart"); // always read-only
+    const next = $("#nextMeetDate");     // editable only if allowed
+    if (rel) rel.disabled = true;
+    if (next) next.disabled = !canEdit;
+
+    // Toolbars visibility
+    showToolbars(canEdit);
+
+    // Dynamic sections toggles
+    markDynamicSectionEditability(canEdit);
+  }
+
+  function markDynamicSectionEditability(canEdit) {
+    // Letters
+    $$("#lettersWrap .letter .title, #lettersWrap .letter .body").forEach(n => {
+      n.setAttribute("contenteditable", canEdit ? "true" : "false");
+    });
+    // Timeline text
+    $$("#timelineList .item .title, #timelineList .item .cap").forEach(n => {
+      n.setAttribute("contenteditable", canEdit ? "true" : "false");
+    });
+    // Gallery captions
+    $$("#galleryGrid .gcap").forEach(n => {
+      n.setAttribute("contenteditable", canEdit ? "true" : "false");
+    });
+    // Bucket
+    $$("#bucketList li .btext").forEach(n => {
+      n.setAttribute("contenteditable", canEdit ? "true" : "false");
+    });
+    // Show/Hide per-item delete buttons
+    $$(".del-btn").forEach(btn => btn.style.display = canEdit ? "inline-flex" : "none");
+  }
+
+  // ===== Renderers =====
   function renderBasics(p) {
-    $("#pageTitle") && ($("#pageTitle").textContent = "Us — Private Space 💌");
-    $("#pageTitleInline") && ($("#pageTitleInline").textContent = "Us — Private Space");
-    document.title = $("#pageTitle")?.textContent || document.title;
+    $("#pageTitle").textContent = "Us — Private Space 💌";
+    $("#pageTitleInline").textContent = $("#pageTitleInline").textContent || "Us — Private Space";
+    document.title = $("#pageTitle").textContent;
 
-    $("#yourName") && ($("#yourName").textContent = p.your_name || "You");
+    $("#yourName").textContent = p.your_name || "You";
     $("#herName") && ($("#herName").textContent = p.her_name || "My Love");
-    $("#openingLine") && ($("#openingLine").textContent = p.opening_line || "");
+    $("#openingLine").textContent = p.opening_line || "";
 
-    $("#relationshipStart") && ($("#relationshipStart").value = p.relationship_start || "");
-    $("#nextMeetDate") && ($("#nextMeetDate").value = p.next_meet_date || "");
+    $("#relationshipStart").value = p.relationship_start || "";
+    $("#nextMeetDate").value = p.next_meet_date || "";
 
-    $("#surpriseMsg") && ($("#surpriseMsg").textContent = p.surprise_message || "");
-    $("#playlistFrame") && ($("#playlistFrame").src = p.playlist_src || "");
+    $("#surpriseMsg").textContent = p.surprise_message || "";
+    $("#playlistFrame").src = p.playlist_src || "";
 
-    $("#heroHeadline") && ($("#heroHeadline").textContent = p.hero_headline || "Welcome");
-    $("#year") && ($("#year").textContent = new Date().getFullYear());
+    $("#heroHeadline").textContent = p.hero_headline || "Welcome";
+    $("#year").textContent = new Date().getFullYear();
+
+    applyEditability();
   }
 
   function fmtDays(n) { return `${n} day${n === 1 ? "" : "s"}`; }
@@ -204,100 +210,240 @@
     const start = p.relationship_start ? new Date(p.relationship_start) : null;
     const next = p.next_meet_date ? new Date(p.next_meet_date) : null;
     const now = new Date();
-    $("#daysTogether") && ($("#daysTogether").textContent = start ? fmtDays(daysBetween(start, now)) : "—");
+    $("#daysTogether").textContent = start ? fmtDays(daysBetween(start, now)) : "—";
     const until = next ? Math.max(0, daysBetween(now, next)) : null;
-    $("#nextMeetCountdown") && ($("#nextMeetCountdown").textContent = (until === null ? "—" : (until === 0 ? "Today! 🎉" : fmtDays(until))));
+    $("#nextMeetCountdown").textContent = (until === null ? "—" : (until === 0 ? "Today! 🎉" : fmtDays(until)));
   }
 
+  // Helpers to create delete buttons
+  function makeDelBtn(aria, handler) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "icon-btn del-btn";
+    b.title = aria;
+    b.setAttribute("aria-label", aria);
+    b.textContent = "🗑️";
+    b.addEventListener("click", handler);
+    return b;
+  }
+
+  // Timeline CRUD
   async function renderTimeline(items) {
-    const wrap = $("#timelineList"); if (!wrap) return;
-    wrap.innerHTML = "";
-    if (!items.length) { $("#timelineEmpty")?.classList.remove("hidden"); return; }
-    $("#timelineEmpty")?.classList.add("hidden");
+    const wrap = $("#timelineList"); wrap.innerHTML = "";
+    if (!items.length) { $("#timelineEmpty").classList.remove("hidden"); } else { $("#timelineEmpty").classList.add("hidden"); }
     for (const row of [...items].sort((a, b) => new Date(a.date) - new Date(b.date))) {
-      const imgSrc = row.img || row.img_url || "assets/cover.jpg";
-      const el = document.createElement("div"); el.className = "item";
-      el.innerHTML = `
-        <img src="${imgSrc}" alt="">
-        <div>
-          <div class="date">${row.date ? new Date(row.date).toLocaleDateString() : ""}</div>
-          <div class="title"><strong>${row.title || ""}</strong></div>
-          <div class="cap">${row.caption || ""}</div>
-        </div>`;
-      wrap.appendChild(el);
+      wrap.appendChild(buildTimelineItem(row));
     }
+    markDynamicSectionEditability(isCurrentEditable());
   }
-
+  function buildTimelineItem(row = {}) {
+    const imgSrc = row.img || row.img_url || "assets/cover.jpg";
+    const el = document.createElement("div");
+    el.className = "item";
+    el.dataset.date = row.date || "";
+    el.dataset.img = imgSrc || "";
+    el.innerHTML = `
+      <img src="${imgSrc}" alt="">
+      <div>
+        <div class="date">${row.date ? new Date(row.date).toLocaleDateString() : ""}</div>
+        <div class="title" contenteditable="false"><strong>${row.title || ""}</strong></div>
+        <div class="cap" contenteditable="false">${row.caption || ""}</div>
+      </div>`;
+    const del = makeDelBtn("Delete timeline item", () => el.remove());
+    el.appendChild(del);
+    return el;
+  }
+  // Gallery CRUD
   async function renderGallery(items) {
-    const wrap = $("#galleryGrid"); if (!wrap) return;
-    wrap.innerHTML = "";
-    if (!items.length) { $("#galleryEmpty")?.classList.remove("hidden"); return; }
-    $("#galleryEmpty")?.classList.add("hidden");
+    const wrap = $("#galleryGrid"); wrap.innerHTML = "";
+    if (!items.length) { $("#galleryEmpty").classList.remove("hidden"); } else { $("#galleryEmpty").classList.add("hidden"); }
     for (const row of items) {
-      const imgSrc = row.img || row.img_url || "";
-      const box = document.createElement("div"); box.style.position = "relative";
-      box.innerHTML = `<img src="${imgSrc}" alt="${row.caption || ""}"/>`;
-      box.querySelector("img").addEventListener("click", () => openLightbox(imgSrc, row.caption));
-      wrap.appendChild(box);
+      wrap.appendChild(buildGalleryItem(row));
     }
+    markDynamicSectionEditability(isCurrentEditable());
+  }
+  function buildGalleryItem(row = {}) {
+    const imgSrc = row.img || row.img_url || "";
+    const box = document.createElement("div"); box.style.position = "relative";
+    box.dataset.img = imgSrc; box.dataset.caption = row.caption || "";
+    box.innerHTML = `
+      <img src="${imgSrc}" alt="${row.caption || ""}"/>
+      <div class="gcap" contenteditable="false" style="margin-top:6px">${row.caption || ""}</div>`;
+    box.querySelector("img").addEventListener("click", () => openLightbox(imgSrc, row.caption));
+    const del = makeDelBtn("Delete photo", () => box.remove());
+    box.appendChild(del);
+    return box;
   }
 
+  // Letters CRUD
   function renderLetters(items) {
-    const wrap = $("#lettersWrap"); if (!wrap) return;
-    wrap.innerHTML = "";
-    if (!items.length) { $("#lettersEmpty")?.classList.remove("hidden"); return; }
-    $("#lettersEmpty")?.classList.add("hidden");
-    items.forEach((row) => {
-      const card = document.createElement("div"); card.className = "letter";
-      card.innerHTML = `
-        <div class="title">${row.title || ""}</div>
-        <div class="body">${row.body || ""}</div>
-        <button class="btn-primary toggle">Open</button>`;
-      card.querySelector(".toggle").addEventListener("click", () => {
-        card.classList.toggle("open");
-        card.querySelector(".toggle").textContent = card.classList.contains("open") ? "Close" : "Open";
-      });
-      wrap.appendChild(card);
+    const wrap = $("#lettersWrap"); wrap.innerHTML = "";
+    if (!items.length) { $("#lettersEmpty").classList.remove("hidden"); } else { $("#lettersEmpty").classList.add("hidden"); }
+    items.forEach((row) => wrap.appendChild(buildLetter(row)));
+    markDynamicSectionEditability(isCurrentEditable());
+  }
+  function buildLetter(row = {}) {
+    const card = document.createElement("div"); card.className = "letter";
+    card.innerHTML = `
+      <div class="title" contenteditable="false">${row.title || ""}</div>
+      <div class="body" contenteditable="false">${row.body || ""}</div>
+      <div class="row">
+        <button class="btn-primary toggle" type="button">Open</button>
+      </div>`;
+    card.querySelector(".toggle").addEventListener("click", () => {
+      card.classList.toggle("open");
+      card.querySelector(".toggle").textContent = card.classList.contains("open") ? "Close" : "Open";
     });
+    const del = makeDelBtn("Delete letter", () => card.remove());
+    card.appendChild(del);
+    return card;
   }
 
+  // Quiz CRUD (render only; add form manages creation)
   function renderQuiz(items) {
-    const form = $("#quizForm"); if (!form) return;
-    const qBox = form.querySelector(".q"); qBox.innerHTML = "";
-    if (!items.length) { $("#quizEmpty")?.classList.remove("hidden"); return; }
-    $("#quizEmpty")?.classList.add("hidden");
-    items.forEach((row, i) => {
-      const name = `q${i}`;
-      const div = document.createElement("div");
-      let inner = `<div class="q-title"><strong>${i + 1}.</strong> ${row.q || row.question || ""}</div>`;
-      (row.options || []).forEach((opt, j) => {
-        inner += `<label><input type="radio" name="${name}" value="${j}" required/> ${opt}</label>`;
-      });
-      div.innerHTML = inner; qBox.appendChild(div);
+    const form = $("#quizForm"); const qBox = form.querySelector(".q"); qBox.innerHTML = "";
+    if (!items.length) { $("#quizEmpty").classList.remove("hidden"); } else { $("#quizEmpty").classList.add("hidden"); }
+    items.forEach((row, i) => qBox.appendChild(buildQuizQuestion(row, i)));
+  }
+  function buildQuizQuestion(row = {}, idx = 0) {
+    const div = document.createElement("div");
+    div.className = "quiz-q";
+    const opts = row.options || [];
+    const qTitle = (row.q || row.question || "");
+    const ans = (typeof row.answerIndex === "number") ? row.answerIndex : row.answer_index;
+    let inner = `<div class="q-title" contenteditable="${isCurrentEditable()}"><strong>${idx + 1}.</strong> <span class="qt">${qTitle}</span></div>`;
+    inner += `<div class="q-opts">`;
+    opts.forEach((opt, j) => {
+      inner += `
+        <label class="q-opt">
+          <input type="radio" name="q${idx}" value="${j}" required ${j===ans?'checked':''}/>
+          <span class="opt" contenteditable="${isCurrentEditable()}">${opt}</span>
+        </label>`;
     });
-    form.onsubmit = (e) => {
-      e.preventDefault();
-      const fd = new FormData(form);
-      let score = 0;
-      items.forEach((row, i) => {
-        const ans = typeof row.answerIndex === "number" ? row.answerIndex : row.answer_index;
-        if (Number(fd.get(`q${i}`)) === ans) score++;
-      });
-      $("#quizResult").textContent = `Score: ${score}/${items.length} ${score === items.length ? "💖 Perfect!" : ""}`;
-    };
+    inner += `</div>`;
+    div.innerHTML = inner;
+    const del = makeDelBtn("Delete question", () => div.remove());
+    div.appendChild(del);
+    return div;
+  }
+
+  // Bucket CRUD
+  function renderBucket(items) {
+    const ul = $("#bucketList"); ul.innerHTML = "";
+    if (!items.length) { $("#bucketEmpty").classList.remove("hidden"); } else { $("#bucketEmpty").classList.add("hidden"); }
+    items.forEach((row) => ul.appendChild(buildBucketItem(row)));
+    markDynamicSectionEditability(isCurrentEditable());
+  }
+  function buildBucketItem(row = {}) {
+    const li = document.createElement("li"); li.className = row.done ? "done" : "";
+    li.innerHTML = `<span class="btext" contenteditable="false">${row.text || ""}</span>`;
+    li.addEventListener("click", (e) => {
+      if (!isCurrentEditable()) return;
+      // avoid toggling when clicking delete button
+      if (e.target.closest(".del-btn")) return;
+      li.classList.toggle("done");
+    });
+    const del = makeDelBtn("Delete item", () => li.remove());
+    li.appendChild(del);
+    return li;
   }
 
   // Lightbox
-  const lb = $("#lightbox"), lbImg = lb?.querySelector(".lightbox-img"), lbCap = lb?.querySelector(".lightbox-cap");
-  function openLightbox(src, cap) { if (!lb || !lbImg || !lbCap) return; lbImg.src = src; lbCap.textContent = cap || ""; lb.classList.add("open"); lb.setAttribute("aria-hidden", "false"); }
-  lb?.querySelector(".lightbox-close")?.addEventListener("click", () => lb.classList.remove("open"));
-  lb?.addEventListener("click", (e) => { if (e.target === lb) lb.classList.remove("open"); });
+  const lb = $("#lightbox"), lbImg = lb.querySelector(".lightbox-img"), lbCap = lb.querySelector(".lightbox-cap");
+  function openLightbox(src, cap) { lbImg.src = src; lbCap.textContent = cap || ""; lb.classList.add("open"); lb.setAttribute("aria-hidden", "false"); }
+  lb.querySelector(".lightbox-close").addEventListener("click", () => lb.classList.remove("open"));
+  lb.addEventListener("click", (e) => { if (e.target === lb) lb.classList.remove("open"); });
 
-  // ===== Save button (unchanged behavior: opens a GitHub issue with payload) =====
+  // ===== Add form handlers (only visible when editable) =====
+  $("#addTimeline").addEventListener("click", () => {
+    if (!isCurrentEditable()) return;
+    const date = prompt("Date (YYYY-MM-DD):") || "";
+    const title = prompt("Title:") || "";
+    const caption = prompt("Caption:") || "";
+    const img = prompt("Image URL:") || "";
+    const item = buildTimelineItem({ date, title, caption, img });
+    // place in correct order by date:
+    $("#timelineList").appendChild(item);
+  });
+
+  $("#addPhoto").addEventListener("click", () => {
+    if (!isCurrentEditable()) return;
+    const img = prompt("Image URL:") || "";
+    if (!img) return;
+    const caption = prompt("Caption (optional):") || "";
+    $("#galleryGrid").appendChild(buildGalleryItem({ img, caption }));
+  });
+
+  $("#addLetter").addEventListener("click", () => {
+    if (!isCurrentEditable()) return;
+    const title = prompt("Letter title:") || "";
+    const body = prompt("Letter body (plain text or simple HTML):") || "";
+    $("#lettersWrap").appendChild(buildLetter({ title, body }));
+  });
+
+  $("#addBucket").addEventListener("click", () => {
+    if (!isCurrentEditable()) return;
+    const text = prompt("Bucket item text:") || "";
+    if (!text) return;
+    $("#bucketList").appendChild(buildBucketItem({ text, done:false }));
+  });
+
+  $("#addQuiz").addEventListener("click", () => {
+    if (!isCurrentEditable()) return;
+    const q = prompt("Question:") || "";
+    const optsCSV = prompt("Options (comma-separated):") || "";
+    const options = optsCSV.split(",").map(s => s.trim()).filter(Boolean);
+    if (!q || options.length < 2) { alert("Need a question and at least 2 options."); return; }
+    let ans = parseInt(prompt(`Correct option index (1-${options.length}):`) || "1", 10);
+    if (isNaN(ans) || ans < 1 || ans > options.length) ans = 1;
+    const div = buildQuizQuestion({ q, options, answerIndex: ans-1 }, $$("#quizForm .quiz-q").length);
+    $("#quizForm .q").appendChild(div);
+    $("#quizEmpty").classList.add("hidden");
+  });
+
+  // ===== Save: collect only CURRENT VERSION (DOM → JSON)
   function collectDataForSave() {
-    return {
-      relationshipStart: $("#relationshipStart")?.value || "",
-      nextMeetDate: $("#nextMeetDate")?.value || "",
+    const relationshipStart = $("#relationshipStart")?.value || ""; // read-only
+    const nextMeetDate     = $("#nextMeetDate")?.value || "";
+
+    // timeline
+    const timeline = $$("#timelineList .item").map(item => ({
+      date: item.dataset.date || "",
+      title: (item.querySelector(".title")?.textContent || "").replace(/^\s+|\s+$/g,""),
+      caption: (item.querySelector(".cap")?.textContent || "").replace(/^\s+|\s+$/g,""),
+      img: item.dataset.img || (item.querySelector("img")?.src || "")
+    }));
+
+    // gallery
+    const gallery = $$("#galleryGrid > div").map(box => ({
+      img: box.dataset.img || (box.querySelector("img")?.src || ""),
+      caption: (box.querySelector(".gcap")?.textContent || "").replace(/^\s+|\s+$/g,"")
+    }));
+
+    // letters
+    const letters = $$("#lettersWrap .letter").map(card => ({
+      title: (card.querySelector(".title")?.textContent || "").replace(/^\s+|\s+$/g,""),
+      body: (card.querySelector(".body")?.innerHTML || "").trim()
+    }));
+
+    // quiz
+    const quiz = $$("#quizForm .quiz-q").map((div, i) => {
+      const q = (div.querySelector(".qt")?.textContent || "").trim();
+      const options = Array.from(div.querySelectorAll(".q-opt .opt")).map(s => s.textContent.trim());
+      const checked = div.querySelector(`input[name="q${i}"]:checked`);
+      const answerIndex = checked ? Number(checked.value) : 0;
+      return { q, options, answerIndex };
+    });
+
+    // bucket
+    const bucket = $$("#bucketList li").map(li => ({
+      text: li.querySelector(".btext")?.textContent.trim() || "",
+      done: li.classList.contains("done")
+    }));
+
+    const payload = {
+      relationshipStart,
+      nextMeetDate,
       versions: {
         [currentVersion]: {
           heroHeadline: $("#heroHeadline")?.textContent.trim() || "",
@@ -305,20 +451,36 @@
           herName: $("#herName")?.textContent.trim() || "",
           openingLine: $("#openingLine")?.textContent.trim() || "",
           surpriseMessage: $("#surpriseMsg")?.textContent.trim() || "",
-          playlistEmbed: { src: $("#playlistFrame")?.src || "" }
+          playlistEmbed: { src: $("#playlistFrame")?.src || "" },
+          timeline, gallery, letters, quiz, bucket
         }
       }
     };
+    return payload;
   }
-  $("#saveBtn")?.addEventListener("click", () => {
-    const data = collectDataForSave();
-    const payload = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
-    const url = `https://github.com/YOUR-USER/YOUR-REPO/issues/new` +
-                `?title=${encodeURIComponent("US-SITE-DATA update")}` +
-                `&body=${encodeURIComponent(payload)}`;
-    window.open(url, "_blank");
-  });
 
+ // Get raw url from meta
+const META_RAW = document.querySelector('meta[name="us-raw-url"]')?.content || "";
+
+$("#saveBtn").addEventListener("click", () => {
+  const data = collectDataForSave();
+  const payload = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
+
+  // Build GitHub repo URL from META_RAW
+  const gh = (META_RAW && META_RAW.includes("/raw.githubusercontent.com/"))
+    ? META_RAW.replace("https://raw.githubusercontent.com/", "https://github.com/")
+              .replace(/\/content\/site-data\.json$/i, "")
+    : "https://github.com/hunlee690/us";
+
+  const url = `${gh}/issues/new` +
+              `?title=${encodeURIComponent(`US-SITE-DATA update (${currentVersion})`)}` +
+              `&body=${encodeURIComponent(payload)}`;
+
+  window.open(url, "_blank");
+});
+
+
+  // ===== Load everything =====
   async function loadEverything() {
     try {
       const SITE_DATA = await fetchSiteData();
@@ -339,12 +501,6 @@
 
   // Boot
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      wireGate();          // ALWAYS show prompt
-      showGate("");        // visible from the start
-    });
-  } else {
-    wireGate();
-    showGate("");
+    document.addEventListener("DOMContentLoaded", () => {});
   }
 })();
