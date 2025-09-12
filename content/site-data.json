@@ -13,19 +13,9 @@
       },
       "timeline": [],
       "gallery": [],
-      "letters": [
-        {
-          "title": "wuvu",
-          "body": "i love you so much"
-        }
-      ],
+      "letters": [],
       "quiz": [],
-      "bucket": [
-        {
-          "text": "eat together",
-          "done": false
-        }
-      ]
+      "bucket": []
     },
     "hnnu": {
       "heroHeadline": "Welcome, Hnnu",
