@@ -4,25 +4,23 @@
   "versions": {
     "pinku": {
       "heroHeadline": "Welcome, Pinku",
-      "yourName": "",
+      "yourName": "You",
       "herName": "",
       "openingLine": "",
       "surpriseMessage": "",
       "playlistEmbed": {
         "src": "https://open.spotify.com/embed/playlist/31SFaLiIHmjl29RF8dXuO0?utm_source=generator"
       },
-      "timeline": [
-        {
-          "date": "2024-01-01",
-          "title": "Example Moment",
-          "caption": "The start of something special 💕",
-          "img": "assets/cover.jpg"
-        }
-      ],
+      "timeline": [],
       "gallery": [],
       "letters": [],
       "quiz": [],
-      "bucket": []
+      "bucket": [
+        {
+          "text": "eat together",
+          "done": false
+        }
+      ]
     },
     "hnnu": {
       "heroHeadline": "Welcome, Hnnu",
@@ -35,13 +33,34 @@
       },
       "timeline": [],
       "gallery": [
-        { "img": "assets/hillside.png",   "caption": "Flower crown + hill breeze 🍃👑" },
-        { "img": "assets/look.png",       "caption": "That look that melts me 🥹" },
-        { "img": "assets/her.png",        "caption": "Her, glowing as always ✨" },
-        { "img": "assets/together.png",   "caption": "Us, exactly where we belong ❤️" },
-        { "img": "assets/together1.png",  "caption": "Laughing at nothing and everything 😂" },
-        { "img": "assets/together2.png",  "caption": "Wind, whispers, and us 🌬️" },
-        { "img": "assets/cool selfi.png", "caption": "Cool selfie. Cooler you 😎" }
+        {
+          "img": "assets/hillside.png",
+          "caption": "Flower crown + hill breeze 🍃👑"
+        },
+        {
+          "img": "assets/look.png",
+          "caption": "That look that melts me 🥹"
+        },
+        {
+          "img": "assets/her.png",
+          "caption": "Her, glowing as always ✨"
+        },
+        {
+          "img": "assets/together.png",
+          "caption": "Us, exactly where we belong ❤️"
+        },
+        {
+          "img": "assets/together1.png",
+          "caption": "Laughing at nothing and everything 😂"
+        },
+        {
+          "img": "assets/together2.png",
+          "caption": "Wind, whispers, and us 🌬️"
+        },
+        {
+          "img": "assets/cool selfi.png",
+          "caption": "Cool selfie. Cooler you 😎"
+        }
       ],
       "letters": [
         {
@@ -52,35 +71,72 @@
       "quiz": [
         {
           "q": "When was our first kiss? 💋",
-          "options": ["14 Feb 2022 💘", "5 Sep 2021 🗓️", "1 Jan 2023 🎆", "5 Sep 2022 📅"],
+          "options": [
+            "14 Feb 2022 💘",
+            "5 Sep 2021 🗓️",
+            "1 Jan 2023 🎆",
+            "5 Sep 2022 📅"
+          ],
           "answerIndex": 3
         },
         {
           "q": "What is my favourite color? 🎨",
-          "options": ["Red ❤️", "Blue 💙", "Black 🖤", "Green 💚"],
+          "options": [
+            "Red ❤️",
+            "Blue 💙",
+            "Black 🖤",
+            "Green 💚"
+          ],
           "answerIndex": 1
         },
         {
           "q": "What is my pet name? 🐾",
-          "options": ["Sugar 🍬", "Honey 🍯", "Bunny 🐰", "Dumbo 😇"],
+          "options": [
+            "Sugar 🍬",
+            "Honey 🍯",
+            "Bunny 🐰",
+            "Dumbo 😇"
+          ],
           "answerIndex": 0
         },
         {
           "q": "What is my favourite food? 🍽️",
-          "options": ["Pizza 🍕", "Roll 🌯", "Burger 🍔", "Pasta 🍝"],
+          "options": [
+            "Pizza 🍕",
+            "Roll 🌯",
+            "Burger 🍔",
+            "Pasta 🍝"
+          ],
           "answerIndex": 1
         },
         {
           "q": "What is my favourite outfit? 👗",
-          "options": ["Hoodie 🧥", "T-shirt & jeans 👕👖", "Suit 🤵🏻", "Sweater 🧶"],
+          "options": [
+            "Hoodie 🧥",
+            "T-shirt & jeans 👕👖",
+            "Suit 🤵🏻",
+            "Sweater 🧶"
+          ],
           "answerIndex": 0
         }
       ],
       "bucket": [
-        { "text": "Watch a sunrise together", "done": false },
-        { "text": "Cook a new recipe", "done": false },
-        { "text": "Weekend trip to the mountains", "done": false },
-        { "text": "Stargazing night", "done": false }
+        {
+          "text": "Watch a sunrise together",
+          "done": false
+        },
+        {
+          "text": "Cook a new recipe",
+          "done": false
+        },
+        {
+          "text": "Weekend trip to the mountains",
+          "done": false
+        },
+        {
+          "text": "Stargazing night",
+          "done": false
+        }
       ]
     }
   }
