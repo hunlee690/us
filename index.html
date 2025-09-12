@@ -27,6 +27,7 @@
     </div>
   </div>
 
+  <!-- Top nav -->
   <header class="nav">
     <div class="brand">
       <span id="pageTitleInline" class="editable" contenteditable="false">Us — Private Space</span><span>❤️</span>
@@ -37,45 +38,38 @@
       <a href="#quiz">Quiz</a><a href="#bucket">Bucket List</a>
     </nav>
     <button id="versionToggle" class="circle-btn" title="Switch version"><span class="tag">hnnu</span></button>
+    <button id="saveBtn" class="circle-btn" title="Save changes">💾</button>
     <button id="signOut" class="circle-btn" title="Lock site">🔒</button>
   </header>
 
   <main>
-    <!-- Hero: background with slim title (no glass/card) -->
+    <!-- Hero -->
     <section id="home" class="hero">
-      
       <div class="hero-decoration" aria-hidden="true"></div>
-
       <div class="hero-title">
         <h1 class="type">
           <span id="heroHeadline">Personal Title</span> ✨
         </h1>
-       <p id="openingLine" class="subtitle editable" contenteditable="false"></p>
-
-        <!-- Surprise button -->
+        <p id="openingLine" class="subtitle editable" contenteditable="false"></p>
         <div class="row center" style="margin-top:12px">
           <button id="openSurprise" class="btn-primary" type="button">Open a surprise</button>
         </div>
       </div>
-
       <div class="floating-theme" aria-hidden="true"></div>
     </section>
 
     <!-- Counters & Dates -->
     <section id="counters" class="section">
       <h2>Time that ties us</h2>
-
       <div class="card">
         <div class="fields">
           <div class="field">
             <label for="relationshipStart">Start date (static)</label>
             <div class="input">
               <div class="icon">📅</div>
-              <!-- Static: 5 September 2022 (set by JS) -->
               <input id="relationshipStart" type="date" class="editable-input" disabled/>
             </div>
           </div>
-
           <div class="field">
             <label for="nextMeetDate">Next meet</label>
             <div class="input">
@@ -85,7 +79,6 @@
           </div>
         </div>
       </div>
-
       <div class="counter-grid" style="margin-top:16px">
         <div class="card">
           <div class="stat" id="daysTogether">—</div>
@@ -165,4 +158,3 @@
   </dialog>
 </body>
 </html>
-
