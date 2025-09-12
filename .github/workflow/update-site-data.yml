@@ -15,27 +15,69 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # ensure we can commit cleanly
 
       - name: Decode payload from issue body
         id: decode
+        shell: bash
         run: |
           BODY=$(jq -r '.issue.body' "$GITHUB_EVENT_PATH")
-          # body is base64 JSON string from the site
-          echo "$BODY" | base64 --decode > content/site-data.json
-          echo "decoded=true" >> $GITHUB_OUTPUT
+          if [ -z "$BODY" ] || [ "$BODY" = "null" ]; then
+            echo "No base64 body found on the issue." >&2
+            exit 1
+          fi
+
+          # Decode to a temp file
+          echo "$BODY" | base64 --decode > content/site-data.json.tmp
+
+          # Validate JSON (pretty print to ensure stable formatting)
+          jq . content/site-data.json.tmp > content/site-data.json || {
+            echo "Invalid JSON payload." >&2
+            exit 1
+          }
+
+          echo "decoded=true" >> "$GITHUB_OUTPUT"
 
       - name: Commit & push
         if: steps.decode.outputs.decoded == 'true'
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add content/site-data.json
-          git commit -m "Update site-data.json from issue #${{ github.event.issue.number }}" || echo "No changes"
-          git push
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update site-data.json from issue #${{ github.event.issue.number }}"
+            git push
+          fi
 
-      - name: Comment on issue
-        run: |
-          gh issue comment ${{ github.event.issue.number }} -b "✅ site-data.json updated!"
+      - name: Comment success
+        if: always()
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          API="https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments"
+          if [ "${{ job.status }}" = "success" ]; then
+            MSG="✅ site-data.json updated!"
+          else
+            MSG="❌ Failed to update site-data.json. Check workflow logs."
+          fi
+          curl -sS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            -d "{\"body\":\"$MSG\"}" "$API" >/dev/null
+
+      # Optional: auto-close the issue on success
+      - name: Close issue (optional)
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -sS -X PATCH \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -d '{"state":"closed"}' \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}"
 
