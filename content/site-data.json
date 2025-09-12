@@ -11,14 +11,7 @@
       "playlistEmbed": {
         "src": "https://open.spotify.com/embed/playlist/31SFaLiIHmjl29RF8dXuO0?utm_source=generator"
       },
-      "timeline": [
-        {
-          "date": "2024-01-01",
-          "title": "Example Moment",
-          "caption": "The start of something special 💕",
-          "img": "assets/cover.jpg"
-        }
-      ],
+      "timeline": [],
       "gallery": [],
       "letters": [],
       "quiz": [],
