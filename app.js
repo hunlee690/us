@@ -5,8 +5,12 @@
   const AUTH_KEY = "us_site_authed";
   const VERSION_KEY = "us_site_version";
 
-  // ===== GitHub raw JSON (replace with your repo path) =====
-  const RAW_URL = "https://raw.githubusercontent.com/YOUR-USER/YOUR-REPO/main/content/site-data.json";
+  // ===== Data sources (NEW) =====
+  // 1) Inline <script type="application/json" id="site-data"> … </script> (preferred if present)
+  // 2) Local file next to index.html: ./site-data.json
+  // 3) GitHub RAW (set via <meta name="us-raw-url" content="https://raw.githubusercontent.../site-data.json">)
+  const META_RAW = document.querySelector('meta[name="us-raw-url"]')?.content || "";
+  const LOCAL_JSON_URL = new URL("./site-data.json", document.baseURI).toString();
 
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -16,14 +20,14 @@
   const authMsg = $("#authMsg");
 
   function showGate(msg = "") {
-    authMsg.textContent = msg || "";
+    if (authMsg) authMsg.textContent = msg || "";
     document.documentElement.classList.add("gated");
-    gate.style.display = "grid";
+    if (gate) gate.style.display = "grid";
   }
   function hideGate() {
-    authMsg.textContent = "";
+    if (authMsg) authMsg.textContent = "";
     document.documentElement.classList.remove("gated");
-    gate.style.display = "none";
+    if (gate) gate.style.display = "none";
   }
 
   async function sha256Hex(str) {
@@ -33,9 +37,9 @@
   }
 
   async function trySignin() {
-    const pass = $("#gPass").value.trim();
-    if (!pass) { authMsg.textContent = "Enter the password."; return; }
-    authMsg.textContent = "Checking…";
+    const pass = $("#gPass")?.value.trim();
+    if (!pass) { if (authMsg) authMsg.textContent = "Enter the password."; return; }
+    if (authMsg) authMsg.textContent = "Checking…";
     try {
       const h = await sha256Hex(pass);
       if (h === HASH_WUVU) {
@@ -47,10 +51,10 @@
         setVersion("hnnu", true);
         hideGate(); loadEverything();
       } else {
-        authMsg.textContent = "Wrong password.";
+        if (authMsg) authMsg.textContent = "Wrong password.";
       }
     } catch (e) {
-      authMsg.textContent = "Crypto not supported.";
+      if (authMsg) authMsg.textContent = "Crypto not supported.";
     }
   }
 
@@ -59,11 +63,15 @@
     showGate("");
   }
 
-  $("#gSignin").onclick = trySignin;
-  $("#signOut").onclick = signOut;
+  $("#gSignin") && ($("#gSignin").onclick = trySignin);
+  $("#signOut") && ($("#signOut").onclick = signOut);
 
-  // Always require login
-  showGate("");
+  // Auto-show/restore auth state (FIX)
+  if (localStorage.getItem(AUTH_KEY) === "1") {
+    hideGate();
+  } else {
+    showGate("");
+  }
 
   // ===== Version toggle =====
   const qs = new URLSearchParams(location.search);
@@ -77,12 +85,13 @@
   function setVersion(v, persist = false) {
     currentVersion = v;
     document.documentElement.setAttribute("data-version", v);
-    $("#versionToggle .tag").textContent = v;
+    const t = $("#versionToggle .tag");
+    if (t) t.textContent = v;
     if (persist) localStorage.setItem(VERSION_KEY, v);
   }
   setVersion(currentVersion);
 
-  $("#versionToggle").addEventListener("click", () => {
+  $("#versionToggle")?.addEventListener("click", () => {
     const next = currentVersion === "hnnu" ? "pinku" : "hnnu";
     const url = new URL(location.href); url.searchParams.set("v", next);
     history.replaceState({}, "", url);
@@ -90,15 +99,63 @@
     loadEverything();
   });
 
-  // ===== Load data =====
-  async function fetchSiteData() {
+  // ===== Load data (REWORKED) =====
+  function parseInlineSiteData() {
     try {
-      const res = await fetch(RAW_URL, { cache: "no-store" });
-      if (res.ok) return await res.json();
+      const tag = document.getElementById("site-data");
+      if (!tag) return null;
+      const raw = tag.textContent?.trim();
+      if (!raw) return null;
+      return JSON.parse(raw);
     } catch (e) {
-      console.warn("Fetch failed, using fallback:", e);
+      console.warn("Inline site-data parse failed:", e);
+      return null;
     }
-    return window.SITE_DATA || {};
+  }
+
+  async function fetchJSON(url) {
+    const bust = Date.now().toString(36);
+    const u = new URL(url, document.baseURI);
+    // cache busting while keeping any existing query params
+    u.searchParams.set("_", bust);
+    const res = await fetch(u.toString(), { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    // Defensive: ensure content is JSON when possible, but still parse if not labeled correctly
+    return await res.json();
+  }
+
+  async function fetchSiteData() {
+    // 1) Inline JSON wins (no fetch needed)
+    const inline = parseInlineSiteData();
+    if (inline) return inline;
+
+    // 2) Local file next to the site (works on any static host / subpath)
+    try {
+      return await fetchJSON(LOCAL_JSON_URL);
+    } catch (e) {
+      console.warn("Local site-data.json not available:", e.message);
+    }
+
+    // 3) GitHub RAW fallback if provided via meta tag
+    if (META_RAW && !/YOUR-USER|YOUR-REPO/.test(META_RAW)) {
+      try {
+        return await fetchJSON(META_RAW);
+      } catch (e) {
+        console.warn("GitHub RAW fetch failed:", e.message);
+      }
+    } else {
+      console.warn("No valid RAW URL configured (set <meta name=\"us-raw-url\" ...>)");
+    }
+
+    // 4) Final fallback to window.SITE_DATA if someone preloads it
+    if (window.SITE_DATA) {
+      console.warn("Using window.SITE_DATA fallback");
+      return window.SITE_DATA;
+    }
+
+    // 5) Give the UI something sane
+    console.error("No site-data available from any source.");
+    return { relationshipStart: "", nextMeetDate: "", versions: {} };
   }
 
   function getProfile(v, SITE_DATA) {
@@ -125,22 +182,22 @@
 
   // ===== Renderers =====
   function renderBasics(p) {
-    $("#pageTitle").textContent = "Us — Private Space 💌";
-    $("#pageTitleInline").textContent = "Us — Private Space";
-    document.title = $("#pageTitle").textContent;
+    $("#pageTitle") && ($("#pageTitle").textContent = "Us — Private Space 💌");
+    $("#pageTitleInline") && ($("#pageTitleInline").textContent = "Us — Private Space");
+    document.title = $("#pageTitle")?.textContent || document.title;
 
-    $("#yourName").textContent = p.your_name || "You";
-    if ($("#herName")) $("#herName").textContent = p.her_name || "My Love";
-    $("#openingLine").textContent = p.opening_line || "";
+    $("#yourName") && ($("#yourName").textContent = p.your_name || "You");
+    $("#herName") && ($("#herName").textContent = p.her_name || "My Love");
+    $("#openingLine") && ($("#openingLine").textContent = p.opening_line || "");
 
-    $("#relationshipStart").value = p.relationship_start || "";
-    $("#nextMeetDate").value = p.next_meet_date || "";
+    $("#relationshipStart") && ($("#relationshipStart").value = p.relationship_start || "");
+    $("#nextMeetDate") && ($("#nextMeetDate").value = p.next_meet_date || "");
 
-    $("#surpriseMsg").textContent = p.surprise_message || "";
-    $("#playlistFrame").src = p.playlist_src || "";
+    $("#surpriseMsg") && ($("#surpriseMsg").textContent = p.surprise_message || "");
+    $("#playlistFrame") && ($("#playlistFrame").src = p.playlist_src || "");
 
-    $("#heroHeadline").textContent = p.hero_headline || "Welcome";
-    $("#year").textContent = new Date().getFullYear();
+    $("#heroHeadline") && ($("#heroHeadline").textContent = p.hero_headline || "Welcome");
+    $("#year") && ($("#year").textContent = new Date().getFullYear());
   }
 
   function fmtDays(n) { return `${n} day${n === 1 ? "" : "s"}`; }
@@ -149,15 +206,16 @@
     const start = p.relationship_start ? new Date(p.relationship_start) : null;
     const next = p.next_meet_date ? new Date(p.next_meet_date) : null;
     const now = new Date();
-    $("#daysTogether").textContent = start ? fmtDays(daysBetween(start, now)) : "—";
+    $("#daysTogether") && ($("#daysTogether").textContent = start ? fmtDays(daysBetween(start, now)) : "—");
     const until = next ? Math.max(0, daysBetween(now, next)) : null;
-    $("#nextMeetCountdown").textContent = until === null ? "—" : (until === 0 ? "Today! 🎉" : fmtDays(until));
+    $("#nextMeetCountdown") && ($("#nextMeetCountdown").textContent = (until === null ? "—" : (until === 0 ? "Today! 🎉" : fmtDays(until))));
   }
 
   async function renderTimeline(items) {
-    const wrap = $("#timelineList"); wrap.innerHTML = "";
-    if (!items.length) { $("#timelineEmpty").classList.remove("hidden"); return; }
-    $("#timelineEmpty").classList.add("hidden");
+    const wrap = $("#timelineList"); if (!wrap) return;
+    wrap.innerHTML = "";
+    if (!items.length) { $("#timelineEmpty")?.classList.remove("hidden"); return; }
+    $("#timelineEmpty")?.classList.add("hidden");
     for (const row of [...items].sort((a, b) => new Date(a.date) - new Date(b.date))) {
       const imgSrc = row.img || row.img_url || "assets/cover.jpg";
       const el = document.createElement("div"); el.className = "item";
@@ -173,9 +231,10 @@
   }
 
   async function renderGallery(items) {
-    const wrap = $("#galleryGrid"); wrap.innerHTML = "";
-    if (!items.length) { $("#galleryEmpty").classList.remove("hidden"); return; }
-    $("#galleryEmpty").classList.add("hidden");
+    const wrap = $("#galleryGrid"); if (!wrap) return;
+    wrap.innerHTML = "";
+    if (!items.length) { $("#galleryEmpty")?.classList.remove("hidden"); return; }
+    $("#galleryEmpty")?.classList.add("hidden");
     for (const row of items) {
       const imgSrc = row.img || row.img_url || "";
       const box = document.createElement("div"); box.style.position = "relative";
@@ -186,9 +245,10 @@
   }
 
   function renderLetters(items) {
-    const wrap = $("#lettersWrap"); wrap.innerHTML = "";
-    if (!items.length) { $("#lettersEmpty").classList.remove("hidden"); return; }
-    $("#lettersEmpty").classList.add("hidden");
+    const wrap = $("#lettersWrap"); if (!wrap) return;
+    wrap.innerHTML = "";
+    if (!items.length) { $("#lettersEmpty")?.classList.remove("hidden"); return; }
+    $("#lettersEmpty")?.classList.add("hidden");
     items.forEach((row) => {
       const card = document.createElement("div"); card.className = "letter";
       card.innerHTML = `
@@ -204,9 +264,10 @@
   }
 
   function renderQuiz(items) {
-    const form = $("#quizForm"); const qBox = form.querySelector(".q"); qBox.innerHTML = "";
-    if (!items.length) { $("#quizEmpty").classList.remove("hidden"); return; }
-    $("#quizEmpty").classList.add("hidden");
+    const form = $("#quizForm"); if (!form) return;
+    const qBox = form.querySelector(".q"); qBox.innerHTML = "";
+    if (!items.length) { $("#quizEmpty")?.classList.remove("hidden"); return; }
+    $("#quizEmpty")?.classList.add("hidden");
     items.forEach((row, i) => {
       const name = `q${i}`;
       const div = document.createElement("div");
@@ -229,9 +290,10 @@
   }
 
   function renderBucket(items) {
-    const ul = $("#bucketList"); ul.innerHTML = "";
-    if (!items.length) { $("#bucketEmpty").classList.remove("hidden"); return; }
-    $("#bucketEmpty").classList.add("hidden");
+    const ul = $("#bucketList"); if (!ul) return;
+    ul.innerHTML = "";
+    if (!items.length) { $("#bucketEmpty")?.classList.remove("hidden"); return; }
+    $("#bucketEmpty")?.classList.add("hidden");
     items.forEach((row) => {
       const li = document.createElement("li"); li.className = row.done ? "done" : "";
       li.textContent = row.text;
@@ -240,18 +302,20 @@
   }
 
   // Lightbox
-  const lb = $("#lightbox"), lbImg = lb.querySelector(".lightbox-img"), lbCap = lb.querySelector(".lightbox-cap");
-  function openLightbox(src, cap) { lbImg.src = src; lbCap.textContent = cap || ""; lb.classList.add("open"); lb.setAttribute("aria-hidden", "false"); }
-  lb.querySelector(".lightbox-close").addEventListener("click", () => lb.classList.remove("open"));
-  lb.addEventListener("click", (e) => { if (e.target === lb) lb.classList.remove("open"); });
+  const lb = $("#lightbox"), lbImg = lb?.querySelector(".lightbox-img"), lbCap = lb?.querySelector(".lightbox-cap");
+  function openLightbox(src, cap) { if (!lb || !lbImg || !lbCap) return; lbImg.src = src; lbCap.textContent = cap || ""; lb.classList.add("open"); lb.setAttribute("aria-hidden", "false"); }
+  lb?.querySelector(".lightbox-close")?.addEventListener("click", () => lb.classList.remove("open"));
+  lb?.addEventListener("click", (e) => { if (e.target === lb) lb.classList.remove("open"); });
 
   // Surprise
   const surprise = $("#surprise");
-  $("#openSurprise").addEventListener("click", () => {
+  $("#openSurprise")?.addEventListener("click", () => {
+    if (!surprise) return;
     if (typeof surprise.showModal === "function") surprise.showModal();
     else surprise.setAttribute("open", "");
   });
-  $("#closeSurprise").addEventListener("click", () => {
+  $("#closeSurprise")?.addEventListener("click", () => {
+    if (!surprise) return;
     surprise.close ? surprise.close() : surprise.removeAttribute("open");
   });
 
@@ -268,26 +332,30 @@
   // ===== Save button: open GitHub Issue =====
   function collectDataForSave() {
     return {
-      relationshipStart: $("#relationshipStart").value || "",
-      nextMeetDate: $("#nextMeetDate").value || "",
+      relationshipStart: $("#relationshipStart")?.value || "",
+      nextMeetDate: $("#nextMeetDate")?.value || "",
       versions: {
         [currentVersion]: {
-          heroHeadline: $("#heroHeadline").textContent.trim(),
-          yourName: $("#yourName").textContent.trim(),
+          heroHeadline: $("#heroHeadline")?.textContent.trim() || "",
+          yourName: $("#yourName")?.textContent.trim() || "",
           herName: $("#herName")?.textContent.trim() || "",
-          openingLine: $("#openingLine").textContent.trim(),
-          surpriseMessage: $("#surpriseMsg").textContent.trim(),
-          playlistEmbed: { src: $("#playlistFrame").src }
+          openingLine: $("#openingLine")?.textContent.trim() || "",
+          surpriseMessage: $("#surpriseMsg")?.textContent.trim() || "",
+          playlistEmbed: { src: $("#playlistFrame")?.src || "" }
           // TODO: add collectors for timeline/gallery/etc. if you want to edit them live
         }
       }
     };
   }
 
-  $("#saveBtn").addEventListener("click", () => {
+  $("#saveBtn")?.addEventListener("click", () => {
     const data = collectDataForSave();
     const payload = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
-    const url = `https://github.com/YOUR-USER/YOUR-REPO/issues/new` +
+    const gh = (META_RAW && META_RAW.includes("/raw.githubusercontent.com/"))
+      ? META_RAW.replace("https://raw.githubusercontent.com/", "https://github.com/")
+          .replace("/content/site-data.json", "")
+      : "https://github.com/YOUR-USER/YOUR-REPO";
+    const url = `${gh}/issues/new` +
                 `?title=${encodeURIComponent("US-SITE-DATA update")}` +
                 `&body=${encodeURIComponent(payload)}`;
     window.open(url, "_blank");
@@ -295,15 +363,28 @@
 
   // ===== Load everything =====
   async function loadEverything() {
-    const SITE_DATA = await fetchSiteData();
-    const p = getProfile(currentVersion, SITE_DATA);
-    renderBasics(p);
-    renderCounters(p);
-    renderTimeline(p.timeline);
-    renderGallery(p.gallery);
-    renderLetters(p.letters);
-    renderQuiz(p.quiz);
-    renderBucket(p.bucket);
+    try {
+      const SITE_DATA = await fetchSiteData();
+      const p = getProfile(currentVersion, SITE_DATA);
+      renderBasics(p);
+      renderCounters(p);
+      renderTimeline(p.timeline);
+      renderGallery(p.gallery);
+      renderLetters(p.letters);
+      renderQuiz(p.quiz);
+      renderBucket(p.bucket);
+    } catch (e) {
+      console.error("Failed to load & render site data:", e);
+      const err = $("#error");
+      if (err) err.textContent = "Could not load site data. Please refresh or try again later.";
+    }
   }
 
+  // Kickoff after DOM is ready (safer if script is in <head>)
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => { if (localStorage.getItem(AUTH_KEY) === "1") loadEverything(); });
+  } else {
+    if (localStorage.getItem(AUTH_KEY) === "1") loadEverything();
+  }
 })();
+
