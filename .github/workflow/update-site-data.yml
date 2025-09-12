@@ -3,6 +3,7 @@ name: Update site-data.json from Issue
 on:
   issues:
     types: [opened, edited, labeled]
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -10,9 +11,22 @@ permissions:
 
 jobs:
   update:
-    if: contains(github.event.issue.title, 'US-SITE-DATA update')
+    # ✅ Run if:
+    #  - manual trigger, OR
+    #  - issue has "auto-update" label, OR
+    #  - title contains "US-SITE-DATA update"
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      contains(join(fromJson(toJson(github.event.issue.labels)).*.name, ','), 'auto-update') ||
+      contains(github.event.issue.title, 'US-SITE-DATA update')
     runs-on: ubuntu-latest
     steps:
+      - name: Debug trigger context (optional)
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Title: ${{ github.event.issue.title }}"
+          echo "Labels: ${{ toJson(github.event.issue.labels) }}"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -20,6 +34,7 @@ jobs:
 
       - name: Decode payload from issue body
         id: decode
+        if: ${{ github.event_name != 'workflow_dispatch' }}
         shell: bash
         run: |
           BODY=$(jq -r '.issue.body' "$GITHUB_EVENT_PATH")
@@ -39,8 +54,15 @@ jobs:
 
           echo "decoded=true" >> "$GITHUB_OUTPUT"
 
+      # Allow manual runs even without an issue body
+      - name: Ensure file exists for manual run
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        run: |
+          test -f content/site-data.json || echo '{}' > content/site-data.json
+
       - name: Commit & push
-        if: steps.decode.outputs.decoded == 'true'
+        id: commit
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
@@ -48,29 +70,33 @@ jobs:
           git add content/site-data.json
           if git diff --cached --quiet; then
             echo "No changes to commit."
+            echo "no_change=true" >> "$GITHUB_OUTPUT"
           else
-            git commit -m "Update site-data.json from issue #${{ github.event.issue.number }}"
+            git commit -m "Update site-data.json from ${{
+              github.event_name == 'workflow_dispatch' && 'manual run' || format('issue #{0}', github.event.issue.number)
+            }}"
             git push
+            echo "no_change=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Comment success
-        if: always()
+      - name: Comment result
+        if: ${{ github.event_name != 'workflow_dispatch' }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           API="https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments"
-          if [ "${{ job.status }}" = "success" ]; then
-            MSG="✅ site-data.json updated!"
+          if [ "${{ steps.commit.outputs.no_change }}" = "true" ]; then
+            MSG="ℹ️ site-data.json already up to date."
           else
-            MSG="❌ Failed to update site-data.json. Check workflow logs."
+            MSG="✅ site-data.json updated!"
           fi
           curl -sS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
             -d "{\"body\":\"$MSG\"}" "$API" >/dev/null
 
-      # Optional: auto-close the issue on success
+      # Optional: auto-close the issue on success (skip for manual runs)
       - name: Close issue (optional)
-        if: success()
+        if: success() && github.event_name != 'workflow_dispatch'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
