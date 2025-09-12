@@ -12,7 +12,12 @@
         "src": "https://open.spotify.com/embed/playlist/31SFaLiIHmjl29RF8dXuO0?utm_source=generator"
       },
       "timeline": [],
-      "gallery": [],
+      "gallery": [
+        {
+          "img": "assets/1757687021288-0a3cc48c3312f16551b7e1d362792307.jpg",
+          "caption": "us"
+        }
+      ],
       "letters": [
         {
           "title": "wuvu",
