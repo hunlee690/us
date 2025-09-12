@@ -1,4 +1,4 @@
-name: Update site-data from Issues
+name: site-data from Issues
 
 on:
   issues:
