@@ -13,9 +13,58 @@
       },
       "timeline": [],
       "gallery": [],
-      "letters": [],
-      "quiz": [],
-      "bucket": []
+      "letters": [
+        {
+          "title": "choose 1 option",
+          "body": "bolo kroge shaadi... 1. haa  2.yes"
+        }
+      ],
+      "quiz": [
+        {
+          "q": "what is my fvrt color<⁠(⁠￣⁠︶⁠￣⁠)⁠>",
+          "options": [
+            "cheery red",
+            "red wine",
+            "tomato red",
+            "maroon"
+          ],
+          "answerIndex": 1
+        },
+        {
+          "q": "what color of i love most? 👀",
+          "options": [
+            "grey",
+            "brown",
+            "ocean green",
+            "blue hazel"
+          ],
+          "answerIndex": 3
+        },
+        {
+          "q": "which horse?🐎",
+          "options": [
+            "black muscular",
+            "white kind",
+            "magical unicorn",
+            "brown tall"
+          ],
+          "answerIndex": 0
+        }
+      ],
+      "bucket": [
+        {
+          "text": "cooking together👩‍🍳👨‍🍳",
+          "done": false
+        },
+        {
+          "text": "meet with family🥰",
+          "done": false
+        },
+        {
+          "text": "making special days more special🥹",
+          "done": false
+        }
+      ]
     },
     "hnnu": {
       "heroHeadline": "Welcome, Hnnu",
