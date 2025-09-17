@@ -7,7 +7,7 @@
       "yourName": "You",
       "herName": "",
       "openingLine": "",
-      "surpriseMessage": "",
+      "surpriseMessage": "Welcome my cutie, handsome and annoying 🙄man.. Thankyou for creating this small space of us💕And i hope it is not a diary which stays unopened in ur phone corner... Come here whenever you miss us❣️.. And add some more features to it so it can be a best personal collection of us😚",
       "playlistEmbed": {
         "src": "https://open.spotify.com/embed/playlist/31SFaLiIHmjl29RF8dXuO0?utm_source=generator"
       },
@@ -62,6 +62,10 @@
         },
         {
           "text": "making special days more special🥹",
+          "done": false
+        },
+        {
+          "text": "staying at cozy place whenever we meet.. and living our moments again😭",
           "done": false
         }
       ]
