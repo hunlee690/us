@@ -484,11 +484,19 @@ $("#addTimeline")?.addEventListener("click", () => {
   });
   
   // ===== Add hidden file input =====
-  const filePicker = document.createElement("input");
-  filePicker.type = "file";
-  filePicker.accept = "image/*";
-  filePicker.style.display = "none";
-  document.body.appendChild(filePicker);
+// ===== Add hidden file input (mobile-safe) =====
+const filePicker = document.createElement("input");
+filePicker.type = "file";
+filePicker.accept = "image/*";
+filePicker.setAttribute("capture", "environment"); // hint to open camera on mobile
+
+// Do NOT use display:none; move it off-screen instead
+filePicker.style.position = "fixed";
+filePicker.style.left = "-9999px";
+filePicker.style.top = "0";
+filePicker.style.opacity = "0";
+
+document.body.appendChild(filePicker);
 
   async function uploadPhotoToGitHub(file, token) {
     const META_RAW = document.querySelector('meta[name="us-raw-url"]')?.content || "";
@@ -850,5 +858,6 @@ $("#addTimeline")?.addEventListener("click", () => {
     loadEverything();
   }
 })();
+
 
 
