@@ -6,6 +6,43 @@
   const VERSION_KEY = "us_site_version"; // persist viewing version only
   const NEXT_MEET_KEY = "nextMeetISO";    // shared across both pages immediately
 
+  // ===== Option A: shared Next Meet helpers + cross-tab sync =====
+const MEET_CHANNEL = "meet-sync";
+
+/** Set/update the next meet globally (all pages/tabs). */
+function setNextMeet(isoString) {
+  localStorage.setItem(NEXT_MEET_KEY, isoString);
+  try { new BroadcastChannel(MEET_CHANNEL).postMessage({ iso: isoString }); } catch {}
+}
+
+/** Read the current next meet value. */
+function getNextMeet() {
+  return localStorage.getItem(NEXT_MEET_KEY);
+}
+
+/** Listen for changes from other tabs/pages and update this page instantly. */
+window.addEventListener("storage", (e) => {
+  if (e.key === NEXT_MEET_KEY) {
+    const iso = e.newValue || "";
+    // update input (if present) for visual sync
+    const input = document.querySelector("#nextMeetDate");
+    if (input) input.value = iso ? toDatetimeLocalValue(new Date(iso)) : "";
+    // update countdown
+    startLiveCountdown(iso ? new Date(iso) : null);
+  }
+});
+try {
+  const bc = new BroadcastChannel(MEET_CHANNEL);
+  bc.onmessage = (e) => {
+    const iso = e?.data?.iso || "";
+    const input = document.querySelector("#nextMeetDate");
+    if (input) input.value = iso ? toDatetimeLocalValue(new Date(iso)) : "";
+    startLiveCountdown(iso ? new Date(iso) : null);
+  };
+} catch {}
+// ===== End Option A helpers =====
+
+
   const $  = (s) => document.querySelector(s);
   const $$ = (s) => Array.from(document.querySelectorAll(s));
 
@@ -817,7 +854,8 @@ document.body.appendChild(filePicker);
       }
       const d = new Date(input.value);
       if (isNaN(d)) return;
-      localStorage.setItem(NEXT_MEET_KEY, d.toISOString());
+      setNextMeet(d.toISOString()); // Option A: write + broadcast
+
       startLiveCountdown(d);
     };
 
@@ -825,8 +863,12 @@ document.body.appendChild(filePicker);
     input.addEventListener("input", applyFromInput);
 
     // If we already have a stored date, ensure countdown starts immediately
-    const iso = localStorage.getItem(NEXT_MEET_KEY);
-    if (iso) startLiveCountdown(new Date(iso));
+     const iso = getNextMeet();
+     if (iso) {
+       input.value = toDatetimeLocalValue(new Date(iso));
+       startLiveCountdown(new Date(iso));
+     }
+
   }
 
   // ===== Load everything =====
@@ -858,6 +900,3 @@ document.body.appendChild(filePicker);
     loadEverything();
   }
 })();
-
-
-
