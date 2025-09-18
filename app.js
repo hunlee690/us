@@ -410,15 +410,51 @@
   lb.addEventListener("click", (e) => { if (e.target === lb) lb.classList.remove("open"); });
 
   // ===== Add form handlers (only visible when editable) =====
-  $("#addTimeline")?.addEventListener("click", () => {
-    if (!isCurrentEditable()) return;
-    const date = prompt("Date (YYYY-MM-DD):") || "";
-    const title = prompt("Title:") || "";
-    const caption = prompt("Caption:") || "";
-    const img = prompt("Image URL:") || "";
-    const item = buildTimelineItem({ date, title, caption, img });
-    $("#timelineList").appendChild(item);
-  });
+$("#addTimeline")?.addEventListener("click", () => {
+  if (!isCurrentEditable()) return;
+
+  // Collect text fields first
+  const date = prompt("Date (YYYY-MM-DD):") || "";
+  const title = prompt("Title:") || "";
+  const caption = prompt("Caption:") || "";
+
+  // Open the same hidden file input used by Gallery
+  filePicker.value = "";
+  filePicker.click();
+
+  filePicker.onchange = async () => {
+    const file = filePicker.files?.[0];
+    if (!file) return;
+
+    try {
+      // Reuse token flow + uploader you already have
+      let token = sessionStorage.getItem("gh_token");
+      if (!token) {
+        token = prompt("Paste a GitHub token with contents:write for this repo") || "";
+        if (!token) throw new Error("No token provided.");
+        sessionStorage.setItem("gh_token", token);
+      }
+
+      // Upload the picked image to the repo's assets/
+      const assetPath = await uploadPhotoToGitHub(file, token);
+
+      // Build and append the timeline item with the uploaded image
+      const item = buildTimelineItem({ date, title, caption, img: assetPath });
+      $("#timelineList").appendChild(item);
+      $("#timelineEmpty")?.classList.add("hidden");
+
+      // (Optional but nice) Immediately persist to GitHub,
+      // matching what you already do for #addPhoto in Gallery
+      const slice = collectDataForSave();
+      await commitSiteDataToGitHub(slice);
+
+      alert("Timeline item added and site-data.json updated ✅");
+    } catch (err) {
+      console.error(err);
+      alert("Adding timeline item failed. See console for details.");
+    }
+  };
+});
 
   $("#addLetter")?.addEventListener("click", () => {
     if (!isCurrentEditable()) return;
@@ -814,4 +850,5 @@
     loadEverything();
   }
 })();
+
 
